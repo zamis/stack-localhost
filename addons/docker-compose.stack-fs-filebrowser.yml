@@ -1,0 +1,69 @@
+name: stack-fs-filebrowser
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  tmp-config:
+  tmp-database:
+  shared-documents:
+    external: true
+  shared-projects:
+    external: true
+  shared-media:
+    external: true
+  shared-local:
+    external: true
+  stack-tool-syncthing-folders:
+    external: true
+
+services:
+  filebrowser:
+    image: filebrowser/filebrowser:v2.63.2
+    command: --noauth --port=80 --root=/srv --database=/database/filebrowser.db
+    restart: unless-stopped
+    user: root
+    configs:
+      - source: settings
+        target: /config/settings.json
+    networks:
+      - my-network-proxy
+    expose:
+      - 80
+    environment:
+      HOME: "/srv"
+      CONFIG: "/config"
+    tmpfs:
+      - /srv:size=1M
+    volumes:
+      - tmp-config:/config
+      - tmp-database:/database
+      - shared-documents:/srv/shared-documents:rw
+      - shared-projects:/srv/shared-projects:rw
+      - shared-media:/srv/shared-media:rw
+      - shared-local:/srv/shared-local:rw
+      - stack-tool-syncthing-folders:/srv/syncthing-folders:rw
+    labels:
+      virtual.caddyfile: |
+        http://filebrowser.localhost {
+          reverse_proxy http://filebrowser:80 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://filebrowser.localhost">filebrowser</a>
+          <small>http://filebrowser.localhost</small>
+        </div>
+
+configs:
+  settings:
+    content: |
+      {
+        "port": 80,
+        "baseURL": "",
+        "address": "",
+        "log": "stdout",
+        "database": "/database/filebrowser.db",
+        "root": "/srv"
+      }
