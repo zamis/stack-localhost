@@ -1,0 +1,37 @@
+name: stack-core
+
+networks:
+  my-network-public:
+    name: my-network-public
+    external: false
+  my-network-proxy:
+    name: my-network-proxy
+    external: false
+
+services:
+  portainer:
+    image: portainer/portainer-ce:2.37.0-alpine
+    restart: always
+    networks:
+      - my-network-public
+      - my-network-proxy
+    expose:
+      - 9000
+      - 9443
+    ports:
+      - 9000:9000
+    volumes:
+      - /var/mnt-links/docker/volumes/portainer/data:/data
+      - /var/mnt-links/docker/volumes/dind-dev/var/run:/var/dind-dev-run/
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      virtual.caddyfile: |
+        http://portainer.localhost {
+          reverse_proxy http://portainer:9000 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://portainer.localhost">portainer</a>
+          <small>http://portainer.localhost</small>
+        </div>

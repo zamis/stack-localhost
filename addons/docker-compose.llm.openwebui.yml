@@ -1,0 +1,30 @@
+name: stack-llm-openwebui
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:0.8.3
+    restart: always    
+    networks:
+      - my-network-proxy
+    expose:
+      - 8080
+    volumes:
+      - /var/mnt-links/docker/volumes/open-webui/app/backend/data:/app/backend/data
+    environment:
+      - HF_HUB_OFFLINE=1
+    labels:
+      virtual.caddyfile: |
+        http://openwebui.localhost {
+          reverse_proxy http://openwebui:8080 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://openwebui.localhost">Open Web UI</a>
+          <small>http://openwebui.localhost</small>
+        </div>

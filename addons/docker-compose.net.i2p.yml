@@ -1,0 +1,37 @@
+name: stack-net-i2p
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  i2p:
+    image: geti2p/i2p:i2p-2.9.0
+    restart: none
+    hostname: i2p.localhost
+    networks:
+      - my-network-proxy
+    expose:
+      - 7657 # I2P Router Console
+      - 7658 # I2P WebApp
+      - 4444 # I2P HTTP Proxy
+      - 4445 # I2P SOCKS Proxy
+    environment:
+      IP_ADDR: 0.0.0.0
+      I2P_HOME: /i2p
+      # EXT_PORT: 50749 # External port for I2P
+    volumes:
+      - /var/mnt-links/docker/volumes/i2p/i2p/.i2p:/i2p/.i2p
+      - /var/mnt-links/docker/volumes/i2p/i2psnark:/i2psnark
+    labels:
+      virtual.caddyfile: |
+        http://i2p.localhost {
+          reverse_proxy http://i2p:7657 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://i2p.localhost">I2P</a>
+          <small>http://i2p.localhost</small>
+        </div>

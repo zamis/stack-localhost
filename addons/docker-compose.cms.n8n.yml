@@ -1,0 +1,31 @@
+name: stack-cms-n8n
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.9.1
+    restart: no
+    networks:
+      - my-network-proxy
+    environment:
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=
+      - N8N_SECURE_COOKIE=false
+    volumes:
+      - /var/mnt-links/docker/volumes/n8n/home/node/.n8n:/home/node/.n8n
+    expose:
+      - 5678
+    labels:
+      virtual.caddyfile: |
+        http://n8n.localhost {
+          reverse_proxy http://n8n:5678 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://n8n.localhost">N8n</a>
+          <small>http://n8n.localhost</small>
+        </div>

@@ -1,0 +1,85 @@
+name: stack-cms-nextcloud
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  nextcloud:
+    build:
+      dockerfile_inline: |
+        FROM docker.io/library/nextcloud:32.0.6
+        RUN apt-get update
+        RUN apt-get install -y sudo
+        ENTRYPOINT ["/entrypoint0.sh"]
+        CMD ["apache2-foreground"]
+    image: localhost/nextcloud
+    restart: always
+    configs:
+      - source: custom_startup
+        target: /entrypoint0.sh
+        mode: 0555
+    networks:
+      - my-network-proxy
+    volumes:
+      - /var/mnt-links/docker/volumes/nextcloud/var/www/html:/var/www/html
+    expose:
+      - 80
+      - 443
+    labels:
+      virtual.caddyfile: |
+        http://nextcloud.localhost {
+          header /* {
+            Strict-Transport-Security "max-age=15552000;"
+          }
+          redir /.well-known/carddav /remote.php/dav/ 301
+          redir /.well-known/caldav /remote.php/dav/ 301
+          reverse_proxy http://nextcloud:80 {
+            transport http {
+            }
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://nextcloud.localhost">nextcloud</a>
+          <small>http://nextcloud.localhost</small>
+        </div>
+
+  collaboracode:
+    image: docker.io/collabora/code:25.04.9.1.1
+    restart: always
+    cap_add:
+      - MKNOD
+    hostname: collaboracode.localhost
+    networks:
+      - my-network-proxy
+    expose:
+      - 9980
+    environment:
+      - server_name=collaboracode.localhost
+      - aliasgroup1=http://nextcloud.localhost
+      - domain=nextcloud.localhost
+      - username=admin
+      - password=admin
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=false --o:logging.level=warning
+    labels:
+      virtual.caddyfile: |
+        http://collaboracode.localhost {
+          reverse_proxy http://collaboracode:9980 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://collaboracode.localhost/hosting/discovery">collaboracode</a>
+          <small>http://collaboracode.localhost/hosting/discovery</small>
+        </div>
+
+configs:
+  custom_startup:
+    content: |
+      #!/bin/sh
+      set -eu
+
+      /cron.sh &
+      /entrypoint.sh "$@"

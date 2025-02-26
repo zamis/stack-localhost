@@ -1,0 +1,26 @@
+name: stack-tool-bentopdf
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  bentopdf:
+    image: ghcr.io/alam00000/bentopdf:2.2.0
+    restart: always
+    networks:
+      - my-network-proxy
+    expose:
+      - 8080 # web
+    labels:
+      virtual.caddyfile: |
+        http://bentopdf.localhost {
+          reverse_proxy http://bentopdf:8080 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://bentopdf.localhost">bentopdf</a>
+          <small>http://bentopdf.localhost</small>
+        </div>

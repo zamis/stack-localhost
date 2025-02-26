@@ -1,0 +1,36 @@
+name: stack-tool-2fauth
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  stack-tool-2fauth-2fauth:
+    external: true
+
+services:
+  2fauth:
+    image: 2fauth/2fauth:6.0.0
+    restart: always
+    networks:
+      - my-network-proxy
+    expose:
+      - 8000
+    environment:
+      - APP_KEY=SomeRandomStringOf32CharsExactly
+      - APP_URL=http://2fauth.localhost
+      - AUTHENTICATION_GUARD=web-guard
+    volumes:
+      - stack-tool-2fauth-2fauth:/2fauth
+    labels:
+      virtual.caddyfile: |
+        http://2fauth.localhost {
+          reverse_proxy http://2fauth:8000 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://2fauth.localhost">2fauth</a>
+          <small>http://2fauth.localhost</small>
+        </div>

@@ -1,0 +1,47 @@
+name: stack-tool-jupyterlab
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  stack-tool-jupyterlab-home-jovyan-work:
+    external: true
+
+services:
+  jupyterlab:
+    image: localhost/minimal-notebook-dotnet
+    build:
+      dockerfile_inline: |
+        FROM docker.io/jupyter/minimal-notebook:latest
+        USER root
+        RUN apt-get update
+        RUN apt-get install -y software-properties-common
+        RUN add-apt-repository ppa:dotnet/backports
+        RUN apt-get install -y dotnet-sdk-10.0
+        # ENV DOTNET_ROOT="$HOME/.dotnet"
+        # ENV PATH="${PATH}:${HOME}/.dotnet:${HOME}/.dotnet/tools"
+        RUN dotnet tool install --global Microsoft.dotnet-interactive
+        USER jovyan
+        # RUN dotnet interactive jupyter install
+        RUN mkdir -p ~/.local/share/jupyter
+        RUN mkdir -p ~/.local/share/jupyter
+    restart: no
+    networks:
+      - my-network-proxy
+    expose:
+      - 8888
+    volumes:
+      - stack-tool-jupyterlab-home-jovyan-work:/home/jovyan/work
+    labels:
+      virtual.caddyfile: |
+        http://jupyterlab.localhost {
+          reverse_proxy http://jupyterlab:8888 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://jupyterlab.localhost">jupyterlab</a>
+          <small>http://jupyterlab.localhost</small>
+        </div>

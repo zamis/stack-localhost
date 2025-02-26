@@ -1,0 +1,121 @@
+name: stack-dev-ubuntu-old
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  tmp1:
+
+services:
+  ubuntu-focal:
+    build:
+      dockerfile_inline: |
+        FROM kasmweb/core-ubuntu-focal:1.16.0
+        USER root
+        RUN add-apt-repository universe -y
+        RUN apt-get update
+        RUN apt-get install -y sudo apt-utils dbus-user-session uidmap coreutils e2fsprogs cryptsetup kpartx nmap socat dialog
+        RUN apt-get install -y git htop mc thunar-archive-plugin iputils-ping openssl
+        RUN apt install -y usbutils pcsc-tools libengine-pkcs11-openssl opensc opensc-pkcs11 gnutls-bin
+        RUN mkdir -p /etc/pkcs11/modules
+        RUN echo "module: /usr/lib/libeTPkcs11.so" >> /etc/pkcs11/modules/eToken.module
+        RUN echo 'kasm-user ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers.d/user
+        RUN passwd -d kasm-user
+        RUN cat <<EOF >/home/kasm-default-profile/Desktop/install.sh
+        #!/usr/bin/env bash
+        set -ex
+        sudo apt install ./safenetauthenticationclient_10.7.77_amd64.deb
+        sudo pcscd -f
+        EOF
+        USER 1000
+    restart: no
+    privileged: true
+    shm_size: 1gb
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    cap_add:
+      - ALL
+    sysctls:
+      # - kernel.unprivileged_userns_clone=1
+      # - fs.inotify.max_user_watches=524288
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_unprivileged_port_start=0
+    networks:
+      - my-network-proxy
+    expose:
+      - 6901
+    environment:
+      KASM_USER: "kasm-user"
+      VNC_USER: kasm_user
+      VNC_PW: password
+      XDG_RUNTIME_DIR: /home/kasm-user/.docker/run
+      UB_IIT_SETTINGS_PATH: /home/kasm-user/tmp
+      DOTNET_ROOT: /mnt/user-data/!apps/dotnet
+      KASM_SVC_WEBCAM: 0
+      KASM_SVC_PRINTER: 0
+      KASM_SVC_AUDIO: 0
+      KASM_SVC_AUDIO_INPUT: 0
+      KASM_SVC_UPLOADS: 0
+      KASM_SVC_GAMEPAD: 0
+      UDEV: on
+    devices:
+      - /dev/fuse:/dev/fuse
+      - /dev/usb:/dev/usb
+      - /dev/bus/usb:/dev/bus/usb
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/mnt-links/docker/volumes/ubuntu-focal/home/kasm-user:/home/kasm-user:rw
+      - /var/mnt-links/media/share-local:/var/mnt-links/media/share-local:rw
+    labels:
+      virtual.caddyfile: |
+        http://ubuntu-focal.localhost {
+          reverse_proxy ubuntu-focal:6901 {
+            transport http {
+              tls
+              tls_insecure_skip_verify
+            }
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://ubuntu-focal.localhost">ubuntu-focal</a>
+          <small>http://ubuntu-focal.localhost</small>
+        </div>
+
+configs:
+  custom_startup:
+    content: |
+      #!/usr/bin/env bash
+      set -ex
+      sudo mkdir -p /run/user && sudo chmod 1777 /run/user
+      sudo mkdir -p $$XDG_RUNTIME_DIR && sudo chown 1000:1000 $$XDG_RUNTIME_DIR
+      mkdir -p /home/kasm-user/.local/share/docker
+      # /usr/bin/desktop_ready && xterm /dockerstartup/utils/docker-port-forward.sh
+      /usr/bin/desktop_ready && xterm dockerd-rootless.sh
+      sleep 1000s
+
+  install:
+    content: |
+      #!/usr/bin/env bash
+      set -ex
+      sudo usermod -a -G video kasm-user
+      # sudo apt install -y ssh
+
+  bashrc:
+    content: |
+      source $$STARTUPDIR/generate_container_user
+
+      export NVM_DIR="$$HOME/.nvm"
+      [ -s "$$NVM_DIR/nvm.sh" ] && \. "$$NVM_DIR/nvm.sh"  # This loads nvm
+      [ -s "$$NVM_DIR/bash_completion" ] && \. "$$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+      export PATH=$$PATH:/home/kasm-user/bin:/home/kasm-user/.local/bin:/home/kasm-user/.dotnet/tools
+      export DOTNET_ROOT=/var/mnt-links/documents/!apps/dotnet
+      # export DOCKER_HOST: tcp://dind-dev:2376
+      # export DOCKER_SOCK: unix://var/run/docker.sock
+      # export DOCKER_SOCK: unix://var/run/user/1000/docker.sock
+      
+      $$STARTUP_EXEC

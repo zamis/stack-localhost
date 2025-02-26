@@ -1,0 +1,110 @@
+name: stack-net-anywherelan
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+  my-network-public:
+    name: my-network-public
+    external: true
+
+volumes:
+  anywherelan-tmp:
+
+services:
+  anywherelan:
+    image: localhost/awl
+    build:
+      dockerfile_inline: |
+        FROM alpine:3.22.2
+        ARG TARGETARCH
+
+        RUN apk update
+        RUN apk add curl net-tools nmap socat
+        # RUN apk add zenity
+        
+        RUN mkdir app
+        WORKDIR /app
+        RUN echo "Common build, I am $$TARGETARCH"
+        RUN curl -L https://github.com/anywherelan/awl/releases/download/v0.15.0/awl-linux-$$TARGETARCH-v0.15.0.tar.gz | tar -xzvf -
+
+        entrypoint ["/entrypoint.sh"]
+    restart: unless-stopped
+    configs:
+      - source: entrypoint
+        target: /entrypoint.sh
+        mode: 0555
+      - source: entrypoint-socat
+        target: /entrypoint-socat.sh
+        mode: 0555
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - my-network-public
+    expose:
+      - 80 # Web UI
+      - 53 # DNS
+      - 8080 # socks5
+      - 8639 # API
+    volumes:
+      - /var/mnt-links/docker/volumes/anywherelan/root/.config/anywherelan:/root/.config/anywherelan
+      - anywherelan-tmp:/var/tmp/awl
+    devices:
+      - /dev/net/tun:/dev/net/tun
+
+  anywherelan-ui:
+    image: localhost/awl-ui
+    build:
+      dockerfile_inline: |
+        FROM alpine:3.22.2
+        RUN apk update
+        RUN apk add iputils-ping socat nmap
+
+        entrypoint ["/entrypoint.sh"]
+    restart: unless-stopped
+    configs:
+      - source: entrypoint-ui
+        target: /entrypoint.sh
+        mode: 0555
+    networks:
+      - my-network-proxy
+    expose:
+      - 80 # Web UI
+    volumes:
+      - anywherelan-tmp:/var/tmp/awl
+    labels:
+      virtual.caddyfile: |
+        http://anywherelan.localhost {
+          reverse_proxy anywherelan-ui:80 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://anywherelan.localhost">anywherelan</a>
+          <small>http://anywherelan.localhost</small>
+        </div>
+
+configs:
+  entrypoint:
+    content: |
+      #!/bin/sh
+
+      set -e
+      /entrypoint-socat.sh &
+      /app/awl
+
+  entrypoint-socat:
+    content: |
+      #!/bin/sh
+
+      set -e
+      sleep 2s
+      rm -f /var/tmp/awl/awl.sock
+      socat -dd UNIX-LISTEN:/var/tmp/awl/awl.sock,fork,mode=777 TCP4-CONNECT:127.0.0.66:80
+
+  entrypoint-ui:
+    content: |
+      #!/bin/sh
+
+      set -e
+      socat TCP-LISTEN:80,fork,reuseaddr UNIX-CONNECT:/var/tmp/awl/awl.sock

@@ -1,0 +1,40 @@
+name: stack-dev-windows
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  windows-dev-store:
+
+services:
+  windows-dev:
+    image: dockurr/windows
+    restart: none
+    environment:
+      VERSION: "core11"
+    devices:
+      - /dev/kvm
+      - /dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - my-network-proxy
+    expose:
+      - 8006
+    ports:
+      - 8006:8006
+    volumes:
+      - windows-dev-store:/storage:rw
+    labels:
+      virtual.caddyfile: |
+        http://windows-dev.localhost {
+          reverse_proxy windows-dev:8006 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://windows-dev.localhost">windows-dev</a>
+          <small>http://windows-dev.localhost</small>
+        </div>

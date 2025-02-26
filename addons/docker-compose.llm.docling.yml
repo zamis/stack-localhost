@@ -1,0 +1,30 @@
+name: stack-llm-docling
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  docling:
+    image: ghcr.io/docling-project/docling-serve-cpu:v1.9.0
+    restart: always    
+    networks:
+      - my-network-proxy
+    expose:
+      - 5001
+    environment:
+      - DOCLING_SERVE_ENABLE_UI=1
+    # volumes:
+    #   - /var/mnt-links/docker/volumes/docling/opt/app-root/src/models:/opt/app-root/src/models
+    labels:
+      virtual.caddyfile: |
+        http://docling.localhost {
+          reverse_proxy http://docling:5001 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://docling.localhost/ui">docling</a>
+          <small>http://docling.localhost/ui</small>
+        </div>

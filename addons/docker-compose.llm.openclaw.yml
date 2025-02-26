@@ -1,0 +1,51 @@
+name: stack-llm-openclaw
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  stack-llm-openclaw-openclaw-data:
+    external: true
+
+services:
+  openclaw:
+    image: localhost/openclaw
+    build:
+      dockerfile_inline: |
+        FROM docker.io/library/node:22-bookworm-slim
+        RUN apt-get update
+        RUN apt-get install -y python3 make g++
+        RUN apt-get install -y git
+        RUN npm install -g openclaw@2026.2.21-2
+        WORKDIR /root
+        VOLUME ["/root/.openclaw"]
+        EXPOSE 18789 18791
+        # CMD ["openclaw", "gateway", "--allow-unconfigured", "--bind", "custom", "--address", "0.0.0.0", "--verbose"]
+        CMD ["sleep", "999999s"]
+    # restart: unless-stopped    
+    restart: no    
+    networks:
+      - my-network-proxy
+    expose:
+      - 18789
+    volumes:
+      - stack-llm-openclaw-openclaw-data:/root/.openclaw
+    environment:
+      - HF_HUB_OFFLINE=1
+    labels:
+      virtual.caddyfile: |
+        http://openclaw.localhost {
+          reverse_proxy openclaw:18789 {
+          }
+        }
+        http://api.openclaw.localhost {
+          reverse_proxy openclaw:18791 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://openclaw.localhost">openclaw</a>
+          <small>http://openclaw.localhost</small>
+        </div>

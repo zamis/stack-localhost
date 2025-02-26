@@ -1,0 +1,38 @@
+name: stack-core-cosmosserver
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  cosmosserver-config:
+    external: true
+      
+services:
+  cosmosserver:
+    image: azukaar/cosmos-server:0.20.2
+    restart: always
+    networks:
+      - my-network-proxy
+    expose:
+      - 80 # web
+      - 443 # web
+    volumes:
+      - cosmosserver-config:/config
+      - /var/mnt-links/docker/volumes/dind-dev/var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      virtual.caddyfile: |
+        http://cosmosserver.localhost {
+          reverse_proxy http://cosmosserver:80 {
+          }
+        }
+        http://*.cosmosserver.localhost {
+          reverse_proxy http://cosmosserver:80 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://cosmosserver.localhost">cosmos-server</a>
+          <small>http://cosmosserver.localhost</small>
+        </div>

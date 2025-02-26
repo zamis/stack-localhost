@@ -1,0 +1,44 @@
+name: stack-llm-surfsense
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  stack-llm-surfsense-data:
+    external: true
+
+services:
+  surfsense:
+    image: ghcr.io/modsetter/surfsense:0.0.13
+    restart: unless-stopped    
+    networks:
+      - my-network-proxy
+    expose:
+      - 3000
+      - 8000
+    volumes:
+      - stack-llm-surfsense-data:/data
+    environment:
+      - AUTH_TYPE=LOCAL
+      - REGISTRATION_ENABLED=true
+      - BACKEND_URL=http://surfsense.localhost
+      - NEXT_PUBLIC_FASTAPI_BACKEND_URL=http://surfsense.localhost
+    labels:
+      virtual.caddyfile: |
+        http://surfsense.localhost {
+          handle /auth/* {
+            reverse_proxy http://surfsense:8000
+          }
+          handle /api/* {
+            reverse_proxy http://surfsense:8000
+          }
+          reverse_proxy http://surfsense:3000 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://surfsense.localhost">surfsense</a>
+          <small>http://surfsense.localhost</small>
+        </div>

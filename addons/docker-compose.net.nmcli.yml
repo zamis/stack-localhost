@@ -1,0 +1,91 @@
+name: stack-net-nmcli
+
+services:
+  nmcli:
+    build:
+      dockerfile_inline: |
+        # syntax=docker/dockerfile:1.14.0
+        FROM ubuntu:24.04
+        RUN apt update 
+        RUN apt install -y network-manager iproute2 
+        RUN mkdir dockerstartup
+        # RUN cat >/dockerstartup/init.sh <<'EOF'
+        COPY <<'EOF' /dockerstartup/init.sh
+        #!/usr/bin/env bash
+
+        # Змінні для налаштування точки доступу
+        if [ -z "$${SSID}" ]; then
+          echo "Змінна (SSID) порожня"
+          return;
+        fi
+        if [ -z "$${PASSWORD}" ]; then
+          echo "Змінна (PASSWORD) порожня"
+          return;
+        fi
+
+        # Функція для перевірки та активації точки доступу
+        manage_hotspot() {
+          if [ -z "$${MAIN}" ]; then
+            echo "Змінна (MAIN) порожня"
+            nmcli device | awk 'NR>1 {print $1, $2, $4}' | awk '$2=="wifi" {print "|", $1, "|", $3}'
+            return;
+          fi
+          CMD="nmcli device | awk 'NR>1 {print \$1, \$2, \$4}' | awk '\$2==\"wifi\" {print \$1, \$3}' | awk '\$1==\"$${MAIN}\" {print \$1}' | awk 'NR==1 {print \$1}'"
+          FOUND=$$(eval $$CMD)
+          if [ -z "$${FOUND}" ]; then
+            echo "Помилка($${MAIN}): Не вдалося знайти Wi-Fi інтерфейс."
+            nmcli device | awk 'NR>1 {print $1, $2, $4}' | awk '$2=="wifi" {print "|", $1, "|", $3}'
+            return;
+          fi
+          CMD="nmcli device | awk 'NR>1 {print \$1, \$2, \$4}' | awk '\$2==\"wifi\" {print \$1, \$3}' | awk '\$1!=\"$${MAIN}\" {print \$1}' | awk 'NR==1 {print \$1}'"
+          INTERFACE=$$(eval $$CMD)
+          if [ -z "$${INTERFACE}" ]; then
+            echo "Помилка($${MAIN}): Не вдалося знайти другий Wi-Fi інтерфейс."
+            return;
+          fi
+          CONNAME="Hotspot-$$INTERFACE"
+          if nmcli connection show "$${CONNAME}" >/dev/null 2>&1; then
+            # Підключення існує
+            LOCVAR_OK=1
+          else
+            # Підключення не існує
+            echo "Підключення '$${CONNAME}' не існує. Створення..."
+            # nmcli connection add type wifi ifname "$${INTERFACE}" con-name "$${CONNAME}" ssid "$${SSID}" autoconnect no
+          fi
+          if nmcli connection show "$${CONNAME}" | awk "/GENERAL.STATE:/" | grep -q "activated"; then
+            if nmcli connection show "$${CONNAME}" | awk "/GENERAL.DEVICES:/" | grep -q "$$INTERFACE"; then
+              LOCVAR_OK=1
+            else
+              nmcli connection down "$${CONNAME}"
+            fi
+          fi
+          if nmcli connection show "$${CONNAME}" | awk "/GENERAL.STATE:/" | grep -q "activated"; then
+            echo "Точка доступу '$${CONNAME}' активна."
+          else
+            echo "Точка доступу '$${CONNAME}' не активна. Активація..."
+            # nmcli connection modify "$${CONNAME}" ifname "$${INTERFACE}" autoconnect no 802-11-wireless.mode ap ipv4.method shared ipv6.method shared wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$${PASSWORD}"
+            nmcli d wifi hotspot ifname "$${INTERFACE}" con-name "$${CONNAME}" ssid "$${SSID}" password "$${PASSWORD}"
+            # nmcli connection up "$${CONNAME}"
+          fi
+        }
+
+        # Керування точкою доступу при першому запуску
+        manage_hotspot
+
+        # Перевірка та активація кожну годину
+        while true; do
+          manage_hotspot
+          sleep 60 # 1 година
+        done
+        EOF
+        RUN chmod +x /dockerstartup/init.sh
+    security_opt:
+      - apparmor:unconfined
+    restart: always
+    environment:
+      - MAIN=$MAIN
+      - SSID=${SSID:?error}
+      - PASSWORD=${PASSWORD:?error}
+    volumes:
+      - /var/run/dbus:/var/run/dbus
+    entrypoint: /dockerstartup/init.sh

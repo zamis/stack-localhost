@@ -1,0 +1,52 @@
+name: stack-net-edgevpn
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  edgevpn:
+    image: quay.io/mudler/edgevpn:v0.31.1
+    restart: unless-stopped
+    configs:
+      - source: custom_startup
+        target: /custom_startup.sh
+        mode: 0555
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - my-network-proxy
+    expose:
+      - 8080 # Web UI
+    environment:
+      - VVV=any
+    volumes:
+      - /var/mnt-links/docker/volumes/edgevpn/root/.edgevpn:/root/.edgevpn
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    entrypoint: ["/custom_startup.sh"]
+    healthcheck:
+      test: ["CMD", "sh", "-c", "ifconfig | grep -q edgevpn0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      virtual.caddyfile: |
+        http://edgevpn.localhost {
+          reverse_proxy edgevpn:8080 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://edgevpn.localhost">edgevpn</a>
+          <small>http://edgevpn.localhost</small>
+        </div>
+
+configs:
+  custom_startup:
+    content: |
+      #!/usr/bin/env sh
+      set -ex
+      EDGEVPNTOKEN=$$(/usr/bin/edgevpn -b -g) /usr/bin/edgevpn api --listen 0.0.0.0:8080 --peerguard

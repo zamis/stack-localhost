@@ -1,0 +1,43 @@
+name: stack-cms-sftpgo
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  sftpgo:
+    image: drakkan/sftpgo:v2.7.0-alpine
+    restart: always
+    user: root
+    networks:
+      - my-network-proxy
+    expose:
+      - 8080 # web
+      - 2022 # sftp
+      - 8090 # webdav
+    environment:
+      SFTPGO_WEBDAVD__BINDINGS__0__PORT: 8090
+      sftpgohome: "/var/lib/sftpgo"
+      sftpgodata: "/srv/sftpgo"
+    volumes:
+      - /var/mnt-links/docker/volumes/sftpgo/var/lib/sftpgo:/var/lib/sftpgo
+      - /var/mnt-links/docker/volumes/sftpgo/srv/sftpgo:/srv/sftpgo
+      - /var/mnt-links/media:/external/media:rw
+      - /var/mnt-links/docker/volumes/syncthing/var/syncthing/folders/share-mobile/remote-share:/external/syncthing/share-mobile:rw
+      - /var/mnt-links/docker/volumes/syncthing/var/syncthing/folders/share-large/remote-share:/external/syncthing/share-large:rw
+    labels:
+      virtual.caddyfile: |
+        http://sftpgo.localhost {
+          reverse_proxy http://sftpgo:8080 {
+          }
+        }
+        http://webdav.localhost {
+          reverse_proxy http://sftpgo:8090 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://sftpgo.localhost">sftpgo</a>
+          <small>http://sftpgo.localhost</small>
+        </div>

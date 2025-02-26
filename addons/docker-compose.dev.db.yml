@@ -1,0 +1,99 @@
+name: stack-dev-db
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  backup:
+  stack-dev-db-database-surrealdb-data:
+    external: true
+  stack-dev-db-database-qdrant-qdrant-storage:
+    external: true
+
+services:
+  database-postgres:
+    image: postgres:17.4
+    restart: unless-stopped
+    networks:
+      - my-network-proxy
+    expose:
+      - 5432
+    environment:
+      POSTGRES_DB: "postgres"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 360s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - /var/mnt-links/docker/volumes/database-postgres/var/lib/postgresql/data:/var/lib/postgresql/data
+      - backup:/backup
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 1G
+
+  database-mongodb:
+    image: mongo:8.2.5
+    restart: unless-stopped
+    networks:
+      - my-network-proxy
+    expose:
+      - 27017
+    volumes:
+      - /var/mnt-links/docker/volumes/database-mongodb/data/db:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      note: mongodb://admin:password@database-mongodb:27017
+
+  database-surrealdb:
+    image: surrealdb/surrealdb:v3.0.0
+    restart: unless-stopped
+    networks:
+      - my-network-proxy
+    expose:
+      - 8000
+    volumes:
+      - stack-dev-db-database-surrealdb-data:/data
+    tmpfs:
+      - /logs:size=100M
+    command: start --log info --user root --pass root
+
+  database-qdrant:
+    image: qdrant/qdrant:v1.17.0
+    restart: unless-stopped
+    networks:
+      - my-network-proxy
+    expose:
+      - 6333
+      - 6334
+      - 6335
+    configs:
+      - source: qdrant_config
+        target: /qdrant/config/production.yaml
+    volumes:
+      - stack-dev-db-database-qdrant-qdrant-storage:/qdrant/storage
+    labels:
+      virtual.caddyfile: |
+        http://qdrant.localhost {
+          reverse_proxy http://database-qdrant:6333 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://qdrant.localhost/dashboard">qdrant</a>
+          <small>http://qdrant.localhost/dashboard</small>
+        </div>
+
+
+configs:
+  qdrant_config:
+    content: |
+      log_level: INFO

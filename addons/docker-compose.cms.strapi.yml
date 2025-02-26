@@ -1,0 +1,45 @@
+name: stack-cms-strapi
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  strapi:
+    build:
+      dockerfile_inline: |
+        FROM node:22-alpine as build
+        ENV NODE_ENV=production
+        RUN apk add git curl
+        WORKDIR /srv/app
+        RUN curl -L https://github.com/strapi/strapi/archive/refs/tags/v5.18.1.zip >v5.18.1.zip && unzip v5.18.1.zip && cd ./strapi-5.18.1
+        RUN npm install --only=production
+        RUN npm run build
+
+        FROM node:22-alpine
+        ENV NODE_ENV=production
+        WORKDIR /srv/app
+        COPY --from=build /svr/strapi-5.18.1/ /srv/app
+        
+        EXPOSE 1337
+        CMD ["npm", "run", "start"]
+    restart: always
+    # command: ["sleep", "99999999"]
+    networks:
+      - my-network-proxy
+    volumes:
+      - /var/mnt-links/docker/volumes/strapi/srv/app:/srv/app
+    expose:
+      - 1337
+    labels:
+      virtual.caddyfile: |
+        http://strapi.localhost {
+          reverse_proxy http://strapi:1337 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://strapi.localhost">strapi</a>
+          <small>http://strapi.localhost</small>
+        </div>

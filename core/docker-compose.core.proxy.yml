@@ -1,0 +1,242 @@
+name: stack-core-proxy
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+  my-network-public:
+    name: my-network-public
+    external: true
+
+volumes:
+  site-home:
+  site-tmpl:
+
+services:
+  proxy-int-gen:
+    image: nginxproxy/docker-gen:0.15.0
+    restart: always
+    network_mode: none
+    environment:
+      - CURRENT_NETWORK=my-network-proxy
+    configs:
+      - source: template_caddyfile_content
+        target: /app/Caddyfile.tmpl
+    command: "-watch /app/Caddyfile.tmpl /etc/caddy/Caddyfile"
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/tmp/docker.sock:ro
+      - site-tmpl:/etc/caddy
+
+  proxy-int:
+    image: caddy:2.10.2-alpine
+    restart: always
+    configs:
+      - source: startCaddy
+        target: /startCaddy.sh
+        mode: 0555
+    extra_hosts:
+      - host:host-gateway      
+    networks:
+      - my-network-public
+      - my-network-proxy
+    ports:
+      - 127.0.0.1:80:80
+      - 127.0.0.1:443:443
+    entrypoint: "/startCaddy.sh"
+    volumes:
+      - /var/mnt-links/docker/volumes/caddy/data:/data
+      - site-tmpl:/etc/caddy
+
+  proxy-web:
+    image: docker.io/jc21/nginx-proxy-manager:2.13.2
+    restart: always
+    extra_hosts:
+      - host:host-gateway      
+    networks:
+      - my-network-public
+      - my-network-proxy
+    expose:
+      - 80
+      - 81
+      - 443
+    volumes:
+      - /var/mnt-links/docker/volumes/nginx-proxy-manager/data:/data
+      - /var/mnt-links/docker/volumes/nginx-proxy-manager/etc/letsencrypt:/etc/letsencrypt
+    labels:
+      virtual.caddyfile: |
+        http://proxy-web.localhost {
+          reverse_proxy http://proxy-web:81 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://proxy-web.localhost">Nginx Proxy Manager</a>
+          <small>http://proxy-web.localhost</small>
+        </div>
+
+  site-home-local-gen:
+    image: nginxproxy/docker-gen:0.15.0
+    restart: always
+    network_mode: none
+    environment:
+      CURRENT_NETWORK: my-network-proxy
+    configs:
+      - source: template_site_content
+        target: /app/index.tmpl.html
+    command: "-watch /app/index.tmpl.html /usr/share/nginx/html/index.html"
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/tmp/docker.sock:ro
+      - site-home:/usr/share/nginx/html
+
+  site-home-local:
+    image: nginx:1.29.0
+    restart: always
+    networks:
+      - my-network-proxy
+    expose:
+      - 80
+    volumes:
+      - site-home:/usr/share/nginx/html
+    labels:
+      virtual.caddyfile: |
+        http://home.localhost {
+          reverse_proxy http://site-home-local:80 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://home.localhost">Home</a>
+          <small>http://home.localhost</small>
+        </div>
+
+configs:
+  startCaddy:
+    content: |
+      #!/bin/sh
+
+      apk add nss-tools
+      caddy run --config /etc/caddy/Caddyfile --watch --adapter caddyfile
+      
+  template_site_content:
+    content: |
+      <html lang="en">
+
+      <head>
+        <title>Home</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Foldit&family=Open+Sans&display=swap');
+          @import url("https://fonts.googleapis.com/css?family=Lora:400,400i,700");
+
+          :root {
+            --gradient-shadow: linear-gradient(45deg, #fb0094, #0000ff, #00ff00, #ffff00, #ff0000, #fb0094, #0000ff, #00ff00, #ffff00, #ff0000);
+          }
+
+          body {
+            background-size: cover;
+            background-repeat: none;
+          }
+
+          /* first button design */
+          .shadow {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            color: #fff;
+            text-align: center;
+            text-decoration: none;
+            font-family: 'Open Sans', sans-serif;
+            font-weight: 200;
+            padding: 10px 20px 10px 20px;
+            background: linear-gradient(0deg, #000, #262626);
+          }
+
+          .shadow:before,
+          .shadow:after {
+            content: "";
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            background: var(--gradient-shadow);
+            background-size: 400%;
+            width: calc(100% + 4px);
+            height: calc(100% + 4px);
+            z-index: -1;
+          }
+
+          .shadow:after {
+            filter: blur(20px);
+          }
+
+          @keyframes animate {
+            0% {
+              background-position: 0 0;
+            }
+
+            50% {
+              background-position: 300% 0;
+            }
+
+            100% {
+              background-position: 0 0;
+            }
+          }
+
+          /* container holding both the image and the paragraph */
+          .container {
+            display: grid;
+            justify-content: space-around;
+          }
+
+          .container div {
+            margin: 10px;
+          }
+          .container div a {
+            @apply .shadow;
+          }
+        </style>
+      </head>
+
+      <body>
+        <div class="container">
+          {{ range $$index, $$container := $ }}
+          {{ $$homefile := trim (index $$container.Labels "virtual.homefile") }}
+          {{ if $$homefile }}
+          {{ $$homefile }}
+          {{ end }}
+          {{ end }}
+        </div>
+      </body>
+      </html>
+  template_caddyfile_content:
+    content: |
+      {
+        auto_https disable_redirects
+        log {
+          level debug
+        }
+      }
+      https:// {
+        tls internal {
+          on_demand
+        }
+        # redir http://{host}{uri} permanent
+        reverse_proxy http://proxy-int {
+          header_up X-Forwarded-Proto http
+          header_up Connection "Upgrade"
+          header_up Scheme http
+        }
+      }
+      http:// {
+        reverse_proxy http://proxy-web {
+        }
+        # respond "not found" 200
+      }
+      {{ range $$index, $$container := $ }}
+      {{ $$caddyfile := trim (index $$container.Labels "virtual.caddyfile") }}
+      {{ if $$caddyfile }}
+      {{ $$caddyfile }}
+      {{ end }}
+      {{ end }}

@@ -1,0 +1,49 @@
+name: stack-media-qbittorrent
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  stack-media-qbittorrent-config:
+    external: true
+  stack-media-qbittorrent-downloads:
+    external: true
+
+services:
+  qbittorrent-nox:
+    image: qbittorrentofficial/qbittorrent-nox:5.1.4-2
+    restart: unless-stopped
+    networks:
+      - my-network-proxy
+    expose:
+      - 8081 # for WebUI
+      - 6881 # TORRENTING_PORT
+    environment:
+      - QBT_LEGAL_NOTICE=confirm
+      - QBT_WEBUI_PORT=8081
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - LANG=en_US.utf8
+      - WEBUI_PORT=8081
+      - TORRENTING_PORT=6881
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - stack-media-qbittorrent-config:/config
+      - stack-media-qbittorrent-downloads:/downloads
+    labels:
+      virtual.caddyfile: |
+        http://qbittorrent.localhost {
+          reverse_proxy http://qbittorrent-nox:8081 {
+            header_up -Origin
+            header_up -Referer
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://qbittorrent.localhost">qbittorrent</a>
+          <small>http://qbittorrent.localhost</small>
+        </div>

@@ -1,0 +1,35 @@
+name: stack-media-stalwart
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  stack-media-stalwart-opt-stalwart:
+    external: true
+
+services:
+  stalwart:
+    image: stalwartlabs/stalwart:v0.15.5-alpine
+    restart: no
+    hostname: stalwart.localhost
+    networks:
+      - my-network-proxy
+    environment:
+      - ENV_TMP=false
+    volumes:
+      - stack-media-stalwart-opt-stalwart:/opt/stalwart
+    expose:
+      - 8080
+    labels:
+      virtual.caddyfile: |
+        http://stalwart.localhost {
+          reverse_proxy http://stalwart:8080 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://stalwart.localhost">Stalwart (IMAP)</a>
+          <small>http://stalwart.localhost</small>
+        </div>

@@ -1,0 +1,30 @@
+name: stack-tool-nexterm
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  nexterm:
+    image: germannewsmaker/nexterm:1.2.0-BETA
+    restart: always
+    networks:
+      - my-network-proxy
+    expose:
+      - 6989 # web
+    environment:
+      ENCRYPTION_KEY: "aba3aa8e29b9904d5d8d705230b664c053415c54be20ad13be99af0057dfa23a"
+    volumes:
+      - /var/mnt-links/docker/volumes/nexterm/app/data:/app/data
+    labels:
+      virtual.caddyfile: |
+        http://nexterm.localhost {
+          reverse_proxy http://nexterm:6989 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://nexterm.localhost">nexterm</a>
+          <small>http://nexterm.localhost</small>
+        </div>

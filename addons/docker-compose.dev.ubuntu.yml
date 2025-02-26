@@ -1,0 +1,112 @@
+name: stack-dev-ubuntu
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  tmp1:
+
+services:
+  ubuntu-dev:
+    image: localhost/ubuntu
+    restart: always
+    privileged: true
+    configs:
+      - source: custom_startup
+        target: /dockerstartup/custom_startup.sh
+        mode: 0555
+      - source: install
+        target: /dockerstartup/utils/install.sh
+        mode: 0555
+      - source: bashrc
+        target: /home/kasm-user/.bashrc
+        mode: 0555
+    shm_size: 2gb
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    networks:
+      - my-network-proxy
+    expose:
+      - 6901
+    environment:
+      KASM_USER: "kasm-user"
+      VNC_USER: kasm_user
+      VNC_PW: password
+      # USER_DOCKER_HOST: dind-dev
+      DOCKER_SOCK: /var/run/user/1000/docker.sock
+      # DOCKER_TLS_VERIFY: 1
+      # DOCKER_TLS_CERTDIR: /certs
+      # DOCKER_CERT_PATH: /certs/client
+      XDG_RUNTIME_DIR: /run/user/1000
+      UB_IIT_SETTINGS_PATH: /home/kasm-user/tmp
+      KASM_SVC_WEBCAM: 0
+      KASM_SVC_PRINTER: 0
+      KASM_SVC_AUDIO: 0
+      KASM_SVC_AUDIO_INPUT: 0
+      KASM_SVC_UPLOADS: 0
+      KASM_SVC_GAMEPAD: 0
+    devices:
+      - /dev/fuse:/dev/fuse
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/mnt-links/docker/volumes/ubuntu/home/kasm-user:/home/kasm-user:rw
+      - /var/mnt-links/docker/volumes/ubuntu/var/mnt-links/docker:/var/mnt-links/docker:rw
+      - /var/mnt-links/docker/volumes/ubuntu/var/mnt-links/media:/var/mnt-links/media:rw
+      - /var/mnt-links/documents:/var/mnt-links/documents:rw
+      - /var/mnt-links/media/share-local:/var/mnt-links/share/share-local:rw
+      - /var/mnt-links/docker/volumes/syncthing/var/syncthing/folders/share-large/remote-share:/var/mnt-links/share/share-large:rw
+    cpu_shares: 128
+    mem_limit: 8G
+    labels:
+      virtual.caddyfile: |
+        http://ubuntu-dev.localhost {
+          reverse_proxy ubuntu-dev:6901 {
+            transport http {
+              tls
+              tls_insecure_skip_verify
+            }
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://ubuntu-dev.localhost">ubuntu-dev</a>
+          <small>http://ubuntu-dev.localhost</small>
+        </div>
+
+configs:
+  custom_startup:
+    content: |
+      #!/usr/bin/env bash
+      set -ex
+      sudo mkdir -p /run/user && sudo chmod 1777 /run/user
+      sudo mkdir -p $$XDG_RUNTIME_DIR && sudo chown 1000:1000 $$XDG_RUNTIME_DIR
+      mkdir -p /home/kasm-user/.local/share/docker
+      # /usr/bin/desktop_ready && xterm /dockerstartup/utils/docker-port-forward.sh
+      /usr/bin/desktop_ready && xterm dockerd-rootless.sh
+      sleep 1000s
+
+  install:
+    content: |
+      #!/usr/bin/env bash
+      set -ex
+      sudo usermod -a -G video kasm-user
+      # sudo apt install -y ssh
+
+  bashrc:
+    content: |
+      source $$STARTUPDIR/generate_container_user
+
+      export NVM_DIR="$$HOME/.nvm"
+      [ -s "$$NVM_DIR/nvm.sh" ] && \. "$$NVM_DIR/nvm.sh"  # This loads nvm
+      [ -s "$$NVM_DIR/bash_completion" ] && \. "$$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+      export PATH=$$PATH:/home/kasm-user/bin:/home/kasm-user/.local/bin:/home/kasm-user/.dotnet/tools
+      export DOTNET_ROOT=/var/mnt-links/documents/!apps/dotnet
+      # export DOCKER_HOST: tcp://dind-dev:2376
+      # export DOCKER_SOCK: unix://var/run/docker.sock
+      # export DOCKER_SOCK: unix://var/run/user/1000/docker.sock
+      
+      $$STARTUP_EXEC

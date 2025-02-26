@@ -1,0 +1,34 @@
+name: stack-tool-coder
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  stack-tool-coder-config:
+    external: true
+
+services:  
+  coder:
+    image: linuxserver/code-server:4.109.2
+    restart: always
+    networks:
+      - my-network-proxy
+    expose:
+      - 8443
+    volumes:
+      - stack-tool-coder-config:/config
+      - /var/mnt-links/media:/external/media:rw
+      - /var/mnt-links/documents:/external/documents:rw
+    labels:
+      virtual.caddyfile: |
+        http://coder.localhost {
+          reverse_proxy http://coder:8443 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://coder.localhost">coder</a>
+          <small>http://coder.localhost</small>
+        </div>
