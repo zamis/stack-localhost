@@ -1,0 +1,51 @@
+name: stack-cms-nocobase
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  nocobase:
+    image: nocobase/nocobase:1.9.18
+    restart: no
+    networks:
+      - my-network-proxy
+    expose:
+      - 80
+    environment:
+      # The application's secret key, used to generate user tokens, etc.
+      # If APP_KEY is changed, old tokens will also become invalid.
+      # It can be any random string, and make sure it is not exposed.
+      - APP_KEY=your-secret-key
+      # Database type, supports postgres, mysql, mariadb
+      - DB_DIALECT=postgres
+      # Database host, can be replaced with the IP of an existing database server
+      - DB_HOST=database-postgres
+      # Database port
+      - DB_PORT=5432
+      # Database name
+      - DB_DATABASE=nocobase
+      # Database user
+      - DB_USER=nocobase
+      # Database password
+      - DB_PASSWORD=nocobase
+      # Timezone
+      - TZ=UTC
+      # Service platform username and password,
+      # used for automatically downloading and updating plugins.
+      - NOCOBASE_PKG_USERNAME=
+      - NOCOBASE_PKG_PASSWORD=
+    volumes:
+      - /var/mnt-links/docker/volumes/nocobase/app/nocobase/storage:/app/nocobase/storage
+    labels:
+      virtual.caddyfile: |
+        http://nocobase.localhost {
+          reverse_proxy http://nocobase:80 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://nocobase.localhost">nocobase</a>
+          <small>http://nocobase.localhost</small>
+        </div>

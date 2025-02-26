@@ -1,0 +1,31 @@
+name: stack-dev-coder
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:  
+  coder:
+    image: linuxserver/code-server:4.106.3
+    restart: always
+    networks:
+      - my-network-proxy
+    expose:
+      - 8443
+    volumes:
+      - /var/mnt-links/docker/volumes/coder/config:/config
+      - /var/mnt-links/media:/external/media:rw
+      - /var/mnt-links/documents:/external/documents:rw
+      - /var/mnt-links/docker/volumes:/external/docker/volumes:ro
+    labels:
+      virtual.caddyfile: |
+        http://coder.localhost {
+          reverse_proxy http://coder:8443 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://coder.localhost">coder</a>
+          <small>http://coder.localhost</small>
+        </div>

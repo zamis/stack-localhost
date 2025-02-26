@@ -1,0 +1,49 @@
+name: stack-tool-jupyterlab
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  datascience-notebook:
+    image: jupyter/datascience-notebook
+    restart: no
+    networks:
+      - my-network-proxy
+    expose:
+      - 8888
+    volumes:
+      - /var/mnt-links/docker/volumes/datascience-notebook/home/jovyan/work:/home/jovyan/work
+    labels:
+      virtual.caddyfile: |
+        http://datascience-notebook.localhost {
+          reverse_proxy http://datascience-notebook:8888 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://datascience-notebook.localhost">datascience-notebook</a>
+          <small>http://datascience-notebook.localhost</small>
+        </div>
+
+  jupyterlab-nautechsystems:
+    image: ghcr.io/nautechsystems/jupyterlab:latest
+    restart: no
+    networks:
+      - my-network-proxy
+    expose:
+      - 8888
+    environment:
+      SPA: 1
+    labels:
+      virtual.caddyfile: |
+        http://jupyterlab-nautechsystems.localhost {
+          reverse_proxy http://jupyterlab-nautechsystems:8888 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://jupyterlab-nautechsystems.localhost">jupyterlab-nautechsystems</a>
+          <small>http://jupyterlab-nautechsystems.localhost</small>
+        </div>
