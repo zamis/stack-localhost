@@ -1,0 +1,65 @@
+name: build-localhost-aws
+
+services:
+  build-aws:
+    restart: no
+    image: localhost/aws
+    build:
+      dockerfile_inline: |
+        FROM public.ecr.aws/aws-cli/aws-cli:2.39.2 AS aws-source
+        
+        FROM ubuntu:26.04
+        RUN apt update
+        RUN apt install -y gosu curl wget nano gnupg apt-transport-https ca-certificates
+        RUN apt install -y git python3 python3-full maven openjdk-11-jdk mandoc
+        
+        RUN curl -sL https://deb.nodesource.com/setup_24.x | bash -
+        RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(grep -oP '(?<=UBUNTU_CODENAME=).*' /etc/os-release || lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+
+        RUN apt update
+        RUN apt install -y nodejs terraform
+        RUN npm i -g npm
+
+        RUN <<EOFG
+        python3 -m venv /envs/syndicate
+        . /envs/syndicate/bin/activate
+        pip install --no-cache-dir aws-syndicate
+        syndicate --help
+        EOFG
+
+        COPY --from=aws-source /usr/local/aws-cli/ /usr/local/aws-cli/
+        COPY --from=aws-source /usr/local/bin/ /usr/local/bin/
+
+        RUN <<EOFG
+        cat <<'EOF' > /app.sh
+        #!/bin/sh
+        export PS1="[ubd] \u@\h:\[\033[0;36m\]\w\[\033[0m\]\$ "
+        export HOME="/home/ubuntu"
+        export SDCT_CONF="/home/ubuntu/.syndicate-config"
+        . /envs/syndicate/bin/activate
+        exec "$$@"
+        EOF
+        chmod +x /app.sh
+
+        cat <<'EOF' > /entrypoint.sh
+        #!/bin/sh
+        if [ "$(stat -c '%U' /sys/fs/cgroup)" = "nobody" ]; then 
+          exec /app.sh "$$@"
+        else
+          if [ -n "$$UIDGID" ]; then
+            exec gosu $$UIDGID /app.sh "$$@"
+          else
+            exec gosu ubuntu /app.sh "$$@"
+          fi
+        fi
+        EOF
+        chmod +x /entrypoint.sh
+        EOFG
+
+        # USER ubuntu
+        WORKDIR /u01/
+        ENV PS1="[ubd] \u@\h:\[\033[0;36m\]\w\[\033[0m\]\$ "
+        ENTRYPOINT ["/entrypoint.sh"]
+        CMD ["/bin/bash"]
+    network_mode: none
