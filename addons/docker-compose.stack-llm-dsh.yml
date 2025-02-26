@@ -1,0 +1,92 @@
+name: stack-llm-dsh
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-llm-dsh-home:
+    external: true
+
+services:
+  dsh:
+    restart: no
+    image: localhost/dsh
+    build:
+      dockerfile_inline: |
+        FROM docker.io/library/node:24-bookworm-slim
+        RUN apt-get update
+        RUN apt-get install -y supervisor gosu curl
+        RUN apt-get install -y git ssh socat net-tools nmap
+        RUN apt-get install -y python3 
+
+        RUN cat <<'EOF' > /bin/dsh
+        #!/usr/bin/env bash
+        set -ex
+        npm exec -y -- @deepseek-ai/dsh $$@
+        EOF
+        RUN chmod +x /bin/dsh
+
+        ENV USERAPP=dsh
+        RUN useradd -m $$USERAPP && adduser $$USERAPP $$USERAPP
+
+        RUN cat <<'EOF' > /supervisord.conf
+        [supervisord]
+        nodaemon=true
+        user=root
+        pidfile=/var/run/supervisord.pid
+
+        [program:dsh]
+        command=gosu %(ENV_USERAPP)s dsh web --no-open
+        autostart=true
+        autorestart=true
+        stdout_logfile=/dev/stdout
+        stdout_logfile_maxbytes=0
+        stderr_logfile=/dev/stderr
+        stderr_logfile_maxbytes=0
+
+        [program:socat]
+        command=gosu %(ENV_USERAPP)s socat TCP-LISTEN:3081,fork,reuseaddr TCP:127.0.0.1:3080
+        autostart=true
+        autorestart=true
+        stdout_logfile=/dev/stdout
+        stdout_logfile_maxbytes=0
+        stderr_logfile=/dev/stderr
+        stderr_logfile_maxbytes=0
+        EOF
+
+        RUN cat <<'EOF' > /entrypoint.sh
+        #!/usr/bin/env bash
+        set -ex
+        # chown -R $$USERAPP:$$USERAPP /home/dsh
+        # exec gosu $$USERAPP "$$@"
+        exec "$$@"
+        EOF
+        RUN chmod +x /entrypoint.sh
+
+        WORKDIR /home/dsh
+        VOLUME ["/home/dsh"]
+        EXPOSE 3081
+        ENTRYPOINT ["/entrypoint.sh"]
+        CMD ["/usr/bin/supervisord", "-c", "/supervisord.conf"]
+    networks:
+      - my-network-proxy
+    expose:
+      - 3081
+    volumes:
+      - stack-llm-dsh-home:/home/dsh
+    labels:
+      virtual.caddyfile: |
+        dsh.localhost {
+          reverse_proxy dsh:3081 {
+            @ws {
+              header Connection *Upgrade*
+              header Upgrade websocket
+            }
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://dsh.localhost">dsh</a>
+          <small>http://dsh.localhost</small>
+        </div>
