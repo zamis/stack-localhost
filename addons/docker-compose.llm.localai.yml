@@ -1,0 +1,29 @@
+name: stack-llm-localai
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  localai:
+    image: localai/localai:v3.7.0
+    restart: always    
+    networks:
+      - my-network-proxy
+    expose:
+      - 8080
+    volumes:
+      - /var/mnt-links/docker/localai/models:/models
+      - /var/mnt-links/docker/localai/backends:/backends
+    labels:
+      virtual.caddyfile: |
+        http://localai.llm.localhost {
+          reverse_proxy http://localai:8080 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://localai.llm.localhost">LocalAI</a>
+          <small>http://localai.llm.localhost</small>
+        </div>
