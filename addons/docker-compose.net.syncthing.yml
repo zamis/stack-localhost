@@ -1,0 +1,42 @@
+name: stack-net-syncthing
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  syncthing:
+    image: syncthing/syncthing:2.0.10
+    restart: always
+    networks:
+      - my-network-proxy
+    expose:
+      - 8384 # Web UI
+    ports:
+      - 22000:22000/tcp # TCP file transfers
+      - 22000:22000/udp # QUIC file transfers
+      - 21027:21027/udp # Receive local discovery broadcasts
+    environment:
+      - STHOMEDIR=/var/syncthing/config
+      - HOME=/var/syncthing/folders
+    volumes:
+      - /var/mnt-links/docker/syncthing/var/syncthing:/var/syncthing
+      - /var/mnt-links/media/share-sync-default:/var/syncthing/folders/default/remote-share:rw
+      - /var/mnt-links/media/share-sync-large:/var/syncthing/folders/default-large/remote-share:rw
+    healthcheck:
+      test: curl -fkLsS -m 2 127.0.0.1:8384/rest/noauth/health | grep -o --color=never OK || exit 1
+      interval: 1m
+      timeout: 10s
+      retries: 3
+    labels:
+      virtual.caddyfile: |
+        http://syncthing.net.localhost {
+          reverse_proxy http://syncthing:8384 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://syncthing.net.localhost">syncthing</a>
+          <small>http://syncthing.net.localhost</small>
+        </div>
