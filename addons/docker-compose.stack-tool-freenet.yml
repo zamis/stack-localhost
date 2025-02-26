@@ -1,0 +1,99 @@
+name: stack-tool-freenet
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-tool-freenet-config:
+    external: true
+  stack-tool-freenet-data:
+    external: true
+
+services:
+  freenet-node:
+    restart: no
+    image: localhost/freenet
+    build:
+      dockerfile_inline: |
+        FROM alpine:3.24.1 AS fetcher
+        RUN apk add curl tar
+
+        ARG TARGETARCH
+        ENV FREENET_VERSION=0.2.131
+
+        WORKDIR /tmp
+        RUN curl -L https://github.com/freenet/freenet-core/releases/download/v$$FREENET_VERSION/freenet-x86_64-unknown-linux-musl.tar.gz | tar -xzvf -
+        RUN curl -L https://github.com/freenet/freenet-core/releases/download/v$$FREENET_VERSION/fdev-x86_64-unknown-linux-musl.tar.gz | tar -xzvf -
+        RUN chmod +x freenet
+        RUN chmod +x fdev
+
+        FROM alpine:3.24.1
+        RUN apk update
+        RUN apk add supervisor gosu curl net-tools nmap socat
+
+        ENV USERAPP=freenet
+        ENV CONFIG_DIR="/config"
+        ENV DATA_DIR="/data"
+        ENV RUST_LOG="info,freenet=info,fdev=info"
+
+        RUN addgroup -S $$USERAPP
+        RUN adduser -S $$USERAPP -G $$USERAPP
+        WORKDIR /home/$$USERAPP
+        COPY --from=fetcher /tmp/freenet /usr/local/bin/freenet
+        COPY --from=fetcher /tmp/fdev /usr/local/bin/fdev
+
+        RUN cat <<'EOF' > /supervisord.conf
+        [supervisord]
+        nodaemon=true
+        user=root
+        pidfile=/var/run/supervisord.pid
+
+        [program:freenet]
+        command=gosu %(ENV_USERAPP)s /usr/local/bin/freenet --config-dir /config --data-dir /data --ws-api-port 7509
+        autostart=true
+        autorestart=true
+        stdout_logfile=/dev/stdout
+        stdout_logfile_maxbytes=0
+        stderr_logfile=/dev/stderr
+        stderr_logfile_maxbytes=0
+        EOF
+
+        RUN cat << 'EOF' > /entrypoint.sh
+        #!/bin/sh
+        set -ex
+        mkdir -p $$CONFIG_DIR $$DATA_DIR
+        chown -R $$USERAPP:$$USERAPP $$CONFIG_DIR
+        chown -R $$USERAPP:$$USERAPP $$DATA_DIR
+        exec "$$@"
+        EOF
+        RUN chmod +x /entrypoint.sh
+
+        EXPOSE 8888 7509
+        ENTRYPOINT ["/entrypoint.sh"]
+        CMD ["/usr/bin/supervisord", "-c", "/supervisord.conf"]
+    networks:
+      - my-network-proxy
+    expose:
+      - 7509
+      - 12345
+      - 12346
+    volumes:
+      - stack-tool-freenet-config:/config
+      - stack-tool-freenet-data:/data
+    labels:
+      virtual.caddyfile: |
+        http://freenet-node.localhost {
+          reverse_proxy freenet-node:7509 {
+            header_up Host "127.0.0.1:7509"
+            header_down Host "freenet-node.localhost:80"
+            header_down -Content-Security-Policy
+            header_down -X-Content-Security-Policy
+            header_down -X-WebKit-CSP
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://freenet-node.localhost">freenet-node</a>
+          <small>http://freenet-node.localhost</small>
+        </div>
