@@ -1,0 +1,112 @@
+name: stack-net-anywherelan
+
+networks:
+  my-network-proxy:
+    external: true
+  my-network-public:
+    external: true
+
+volumes:
+  stack-net-anywherelan-config:
+    external: true
+  anywherelan-tmp:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: "size=1M"
+
+services:
+  anywherelan:
+    restart: unless-stopped
+    image: localhost/awl
+    build:
+      dockerfile_inline: |
+        FROM alpine:3.24.1
+        ARG TARGETARCH
+        ENV USERAPP=root
+
+        RUN apk update
+        RUN apk add gosu curl net-tools nmap socat
+        # RUN apk add zenity
+
+        RUN mkdir app
+        WORKDIR /app
+        RUN echo "Common build, I am $$TARGETARCH"
+        RUN curl -L https://github.com/anywherelan/awl/releases/download/v0.18.0/awl-linux-$$TARGETARCH-v0.18.0.tar.gz | tar -xzvf -
+
+        RUN cat << 'EOF' > /entrypoint.sh
+        #!/bin/sh
+        set -ex
+        chown -R $$USERAPP:$$USERAPP /root/.config/anywherelan
+        # exec gosu $$USERAPP "$@"
+        exec "$@"
+        EOF
+        RUN chmod +x /entrypoint.sh
+
+        RUN cat << 'EOF' > /entrypoint-awl.sh
+        #!/bin/sh
+        set -ex
+        /entrypoint-socat.sh &
+        /app/awl
+        EOF
+        RUN chmod +x /entrypoint-awl.sh
+
+        RUN cat << 'EOF' > /entrypoint-socat.sh
+        #!/bin/sh
+        set -ex
+        sleep 2s
+        rm -f /var/tmp/awl/awl.sock
+        socat -dd UNIX-LISTEN:/var/tmp/awl/awl.sock,fork,mode=777 TCP4-CONNECT:127.0.0.66:80
+        EOF
+        RUN chmod +x /entrypoint-socat.sh
+
+        ENTRYPOINT ["/entrypoint.sh"]
+        CMD ["/entrypoint-awl.sh"]
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - my-network-public
+    expose:
+      - 80 # Web UI
+      - 53 # DNS
+      - 8080 # socks5
+      - 8639 # API
+    volumes:
+      - stack-net-anywherelan-config:/root/.config/anywherelan
+      - anywherelan-tmp:/var/tmp/awl
+    devices:
+      - /dev/net/tun:/dev/net/tun
+
+  anywherelan-ui:
+    restart: unless-stopped
+    image: localhost/awl-ui
+    build:
+      dockerfile_inline: |
+        FROM alpine:3.24.1
+        RUN apk update
+        RUN apk add iputils-ping socat nmap
+        RUN cat << 'EOF' > /entrypoint.sh
+        #!/bin/sh
+        set -ex
+        socat TCP-LISTEN:80,fork,reuseaddr UNIX-CONNECT:/var/tmp/awl/awl.sock
+        EOF
+        RUN chmod +x /entrypoint.sh
+        ENTRYPOINT ["/entrypoint.sh"]
+    networks:
+      - my-network-proxy
+    expose:
+      - 80 # Web UI
+    volumes:
+      - anywherelan-tmp:/var/tmp/awl
+    labels:
+      virtual.caddyfile: |
+        http://anywherelan.localhost {
+          reverse_proxy anywherelan-ui:80 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://anywherelan.localhost">anywherelan</a>
+          <small>http://anywherelan.localhost</small>
+        </div>

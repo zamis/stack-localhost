@@ -1,0 +1,77 @@
+name: stack-media-peertube
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-media-peertube-config:
+    external: true
+  stack-media-peertube-data:
+    external: true
+
+services:
+  peertube:
+    image: chocobozzz/peertube:v8.2.2
+    restart: no
+    shm_size: 1gb
+    hostname: peertube.localhost
+    networks:
+      - my-network-proxy
+    expose:
+      - 9000
+      - 1935
+    environment:
+      - PEERTUBE_ADMIN_EMAIL=peertube@peertube.localhost
+      - PT_INITIAL_ROOT_PASSWORD=11111111
+      - PEERTUBE_SECRET=abc
+      - PEERTUBE_TRUST_PROXY=["127.0.0.1", "loopback", "172.0.0.0/24"]
+      - PEERTUBE_WEBSERVER_HTTPS=false
+      - PEERTUBE_WEBSERVER_HOSTNAME=peertube.localhost
+      - PEERTUBE_WEBSERVER_PORT=80
+      - PEERTUBE_STREAMING_PORT=1935
+      - PEERTUBE_DB_USERNAME=peertube
+      - PEERTUBE_DB_PASSWORD=peertube
+      - PEERTUBE_DB_HOSTNAME=db-postgres
+      - PEERTUBE_DB_NAME=peertube
+      - PEERTUBE_DB_SSL=false
+      - PEERTUBE_REDIS_HOSTNAME=db-redis
+      # - PEERTUBE_SMTP_HOSTNAME=postfix
+      # - PEERTUBE_SMTP_PORT=25
+      # - PEERTUBE_SMTP_FROM=noreply@peertube.localhost
+      # - PEERTUBE_SMTP_TLS=false
+      # - PEERTUBE_SMTP_DISABLE_STARTTLS=false
+    volumes:
+      - stack-media-peertube-config:/config:rw
+      - stack-media-peertube-data:/data:rw
+    labels:
+      virtual.caddyfile: |
+        http://peertube.localhost {
+          reverse_proxy peertube:9000 {
+            header_up Host "peertube.localhost"
+            header_up X-Real-IP "127.0.0.1"
+            header_up X-Forwarded-For "peertube.localhost"
+            header_up X-Forwarded-Proto "http"
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://peertube.localhost">peertube</a>
+          <small>http://peertube.localhost</small>
+        </div>
+
+  postfix:
+    image: mwader/postfix-relay
+    restart: no
+    networks:
+      - my-network-proxy
+    environment:
+      # - RELAYHOST=smtp-relay.mail.yahoo.com:587
+      - RELAYHOST_USERNAME=abc
+      - RELAYHOST_PASSWORD=abc
+      - RELAYHOST_TLS=yes
+    tmpfs:
+      - /var/lib/postfix:size=10M
+      - /var/mail:size=10M
+      - /etc/opendkim/keys:size=10M
+      - /var/spool/postfix:size=10M

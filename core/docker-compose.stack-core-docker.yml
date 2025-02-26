@@ -1,0 +1,41 @@
+name: stack-core-docker
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  shared-volumes-dind-run:
+    external: true
+  shared-volumes-dind-certs:
+    external: true
+  shared-volumes-dind-data:
+    external: true
+  shared-volumes-dind-mnt-links:
+    external: true
+  shared-documents:
+    external: true
+  shared-projects:
+    external: true
+  shared-media:
+    external: true
+  shared-local:
+    external: true
+
+services:
+  dind:
+    image: docker:29.6.0-dind
+    restart: always
+    privileged: true
+    hostname: dind
+    networks:
+      - my-network-proxy
+    devices:
+      - /dev/fuse:/dev/fuse
+    volumes:
+      - shared-volumes-dind-run:/var/run
+      - shared-volumes-dind-certs:/certs
+      - shared-volumes-dind-data:/var/lib/docker
+      - shared-volumes-dind-mnt-links:/var/mnt-links
+      - shared-media:/var/mnt-links/shared-media
+      - shared-local:/var/mnt-links/shared-local

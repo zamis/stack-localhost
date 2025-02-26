@@ -1,0 +1,119 @@
+name: stack-core
+
+networks:
+  my-network-public:
+    name: my-network-public
+    external: false
+  my-network-proxy:
+    name: my-network-proxy
+    external: false
+
+volumes:
+  shared-volumes:
+    external: false
+    name: shared-volumes
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/mnt-links/shared-volumes
+      o: "X-mount.mkdir,bind"
+  shared-volumes-host-run:
+    external: false
+    name: shared-volumes-host-run
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/run
+      o: "bind"
+  shared-volumes-dind-certs:
+    external: false
+    name: shared-volumes-dind-certs
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/mnt-links/shared-volumes/dind-certs
+      o: "X-mount.mkdir,bind"
+  shared-volumes-dind-data:
+    external: false
+    name: shared-volumes-dind-data
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/mnt-links/shared-volumes/dind-data
+      o: "X-mount.mkdir,bind"
+  shared-volumes-dind-mnt-links:
+    external: false
+    name: shared-volumes-dind-mnt-links
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/mnt-links/shared-volumes/dind-mnt-links
+      o: "X-mount.mkdir,bind"
+  shared-volumes-dind-run:
+    external: false
+    name: shared-volumes-dind-run
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/mnt-links/shared-volumes/dind-run
+      o: "X-mount.mkdir,bind"
+  shared-volumes-portainer-data:
+    external: false
+    name: shared-volumes-portainer-data
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/mnt-links/shared-volumes/portainer-data
+      o: "X-mount.mkdir,bind"
+  shared-documents:
+    external: false
+    name: shared-documents
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/mnt-links/shared-documents
+      o: "X-mount.mkdir,bind,uid=1000,gid=1000"
+  shared-projects:
+    external: false
+    name: shared-projects
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/mnt-links/shared-projects
+      o: "X-mount.mkdir,bind,uid=1000,gid=1000"
+  shared-media:
+    external: false
+    name: shared-media
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/mnt-links/shared-media
+      o: "X-mount.mkdir,bind,uid=1000,gid=1000"
+  shared-local:
+    external: false
+    name: shared-local
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/mnt-links/shared-local
+      o: "X-mount.mkdir,bind,uid=1000,gid=1000"
+
+services:
+  busybox:
+    image: busybox
+    restart: no
+    networks:
+      - my-network-public
+      - my-network-proxy
+    volumes:
+      - shared-volumes:/data/shared-volumes:ro
+      - shared-volumes-host-run:/data/shared-volumes-host-run:ro
+      - shared-volumes-dind-certs:/data/shared-volumes-dind-certs:ro
+      - shared-volumes-dind-data:/data/shared-volumes-dind-data:ro
+      - shared-volumes-dind-run:/data/shared-volumes-dind-run:ro
+      - shared-volumes-dind-mnt-links:/data/shared-volumes-dind-mnt-links:ro
+      - shared-volumes-portainer-data:/data/shared-volumes-portainer-data:ro
+      - shared-documents:/data/shared-documents:ro
+      - shared-projects:/data/shared-projects:ro
+      - shared-media:/data/shared-media:ro
+      - shared-local:/data/shared-local:ro

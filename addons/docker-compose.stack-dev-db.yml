@@ -1,0 +1,140 @@
+name: stack-dev-db
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-dev-db-backup:
+    external: true
+  stack-dev-db-postgres-data:
+    external: true
+  stack-dev-db-mongodb-data:
+    external: true
+  stack-dev-db-mongodb-configdb:
+    external: true
+  stack-dev-db-surrealdb-data:
+    external: true
+  stack-dev-db-qdrant-data:
+    external: true
+  stack-dev-db-mssql-data:
+    external: true
+
+services:
+  db-postgres:
+    restart: unless-stopped
+    image: postgres:17.10-alpine
+    networks:
+      - my-network-proxy
+    expose:
+      - 5432
+    environment:
+      POSTGRES_DB: "postgres"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+      BACKUP: "pg_dumpall -U postgres > /backup/pg/databases.sql"
+      RESTORE: "psql -U postgres postgres < /backup/pg/databases.sql"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 360s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - stack-dev-db-postgres-data:/var/lib/postgresql/data
+      - stack-dev-db-backup:/backup
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 2G
+
+  db-mongodb:
+    restart: unless-stopped
+    image: mongo:8.2.5
+    networks:
+      - my-network-proxy
+    expose:
+      - 27017
+    volumes:
+      - stack-dev-db-mongodb-configdb:/data/configdb
+      - stack-dev-db-mongodb-data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      note: mongodb://admin:password@db-mongodb:27017
+
+  db-surrealdb:
+    restart: unless-stopped
+    image: surrealdb/surrealdb:v2.6.5
+    networks:
+      - my-network-proxy
+    expose:
+      - 8000
+    volumes:
+      - stack-dev-db-surrealdb-data:/data
+    tmpfs:
+      - /logs:size=100M
+    command: start --log info --user root --pass root
+
+  db-qdrant:
+    restart: unless-stopped
+    image: qdrant/qdrant:v1.17.1
+    networks:
+      - my-network-proxy
+    expose:
+      - 6333
+      - 6334
+      - 6335
+    configs:
+      - source: qdrant_config
+        target: /qdrant/config/production.yaml
+    volumes:
+      - stack-dev-db-qdrant-data:/qdrant/storage
+    labels:
+      virtual.caddyfile: |
+        http://qdrant.localhost {
+          reverse_proxy http://db-qdrant:6333 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://qdrant.localhost/dashboard">qdrant</a>
+          <small>http://qdrant.localhost/dashboard</small>
+        </div>
+
+  db-mssql:
+    restart: unless-stopped
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    networks:
+      - my-network-proxy
+    expose:
+      - 1433
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Qbjhvd654%$;"
+    volumes:
+      - stack-dev-db-mssql-data:/var/lib/mssql
+      - stack-dev-db-backup:/backup
+    deploy:
+      resources:
+        limits:
+          cpus: 1
+          memory: 2G
+
+  db-redis:
+      image: redis:8-alpine
+      restart: unless-stopped
+      networks:
+        - my-network-proxy
+      expose:
+        - 6379
+      tmpfs:
+        - /data:size=100M
+      # volumes:
+      #   - ./docker-volume/redis:/data
+
+configs:
+  qdrant_config:
+    content: |
+      log_level: INFO

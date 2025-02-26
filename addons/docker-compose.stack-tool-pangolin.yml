@@ -1,0 +1,99 @@
+name: stack-tool-pangolin
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-tool-pangolin-config:
+    external: true
+
+services:
+  pangolin:
+    image: docker.io/fosrl/pangolin:1.18.4
+    restart: none
+    networks:
+      - my-network-proxy
+    expose:
+      - 3000 # for dashboard
+      - 3001 # for API
+      - 3002 # for gerbil
+    configs:
+      - source: config
+        target: /app/config/config.yml
+        mode: 0555
+    volumes:
+      - stack-tool-pangolin-config:/app/config
+
+  gerbil:
+    image: docker.io/fosrl/gerbil:1.4.0 # https://github.com/fosrl/gerbil/releases
+    restart: none
+    networks:
+      - my-network-proxy
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    command:
+      - --reachableAt=http://gerbil:3004
+      - --generateAndSaveKeyTo=/var/config/key
+      - --remoteConfig=http://pangolin:3001/api/v1/
+    volumes:
+      - stack-tool-pangolin-config:/var/config
+    expose:
+      - 51820/udp
+      - 21820/udp
+      - 443
+      - 80
+    labels:
+      virtual.caddyfile: |
+        http://pangolin.localhost {
+          reverse_proxy http://gerbil:80 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://pangolin.localhost">pangolin</a>
+          <small>http://pangolin.localhost</small>
+        </div>
+
+configs:
+  config:
+    content: |
+      gerbil:
+        start_port: 51820
+        base_endpoint: "pangolin.localhost" # REPLACE WITH YOUR DOMAIN
+        # Optional network settings (defaults shown):
+        # subnet_group: "100.89.137.0/20"
+        # block_size: 24
+        # site_block_size: 30
+
+      app:
+        dashboard_url: "https://pangolin.localhost" # REPLACE WITH YOUR DOMAIN
+        log_level: "info"
+        telemetry:
+          anonymous_usage: false
+
+      domains:
+        domain1:
+          base_domain: "localhost" # REPLACE WITH YOUR DOMAIN
+          cert_resolver: "letsencrypt"
+
+      server:
+        secret: "your-strong-secret" # REPLACE
+        cors:
+          origins: ["https://pangolin.localhost"] # REPLACE WITH YOUR DOMAIN
+          methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]
+          allowed_headers: ["X-CSRF-Token", "Content-Type"]
+          credentials: false
+
+      # Optional organization network settings (defaults shown):
+      # orgs:
+      #     block_size: 24
+      #     subnet_group: "100.90.128.0/20"
+      #     utility_subnet_group: "100.96.128.0/20"
+
+      flags:
+          require_email_verification: false
+          disable_signup_without_invite: true
+          disable_user_create_org: false
+          allow_raw_resources: true

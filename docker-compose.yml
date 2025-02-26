@@ -1,0 +1,7 @@
+name: stack-localhost-ubuntu-build
+
+services:
+  ubuntu-build:
+    image: localhost/ubuntu
+    build: ./
+    restart: no
