@@ -1,0 +1,156 @@
+name: build-localhost-coder
+
+services:
+  build-localhost-coder:
+    restart: no
+    image: localhost/coder
+    build:
+      dockerfile_inline: |
+        FROM mcr.microsoft.com/dotnet/sdk:10.0 AS dotnet-10
+        FROM mcr.microsoft.com/dotnet/sdk:11.0 AS dotnet-11
+
+        FROM alpine/curl:8.23.0 AS downloads-coder
+        ARG TARGETARCH
+        ENV ARCH=$$TARGETARCH
+        ENV VERSION="4.145.2"
+        RUN curl -fsSL https://github.com/coder/code-server/releases/download/v$${VERSION}/code-server_$${VERSION}_$${ARCH}.deb -o /tmp/code-server.deb
+
+        FROM docker.io/library/ubuntu:26.04
+        RUN apt update
+        RUN apt install -y software-properties-common
+        RUN apt install -y apt-utils
+        RUN add-apt-repository -y ppa:xtradeb/apps
+
+        RUN apt install -y sudo gosu supervisor
+        RUN apt install -y curl gnupg ca-certificates openssl ssh git iputils-ping nmap socat encfs uidmap iproute2
+        RUN apt install -y libicu78 coreutils multipath-tools e2fsprogs cryptsetup
+        RUN apt install -y xvfb chromium
+
+        RUN curl -fsSL https://get.docker.com | VERSION=29.9.3 sh
+        RUN mkdir -p /opt/nvm && curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.41.0/install.sh | NVM_DIR=/opt/nvm bash
+
+        COPY --from=downloads-coder /tmp/code-server.deb /tmp/code-server.deb
+        RUN apt -y install /tmp/code-server.deb && rm /tmp/code-server.deb
+
+        COPY --from=dotnet-10 /usr/share/dotnet /usr/share/dotnet
+        COPY --from=dotnet-11 /usr/share/dotnet /usr/share/dotnet
+        ENV DOTNET_ROOT=/usr/share/dotnet
+
+        ARG TARGETARCH
+        ENV USERAPP=ubuntu
+        ENV USERHOME=/home/ubuntu
+        ENV XDG_RUNTIME_DIR=/run/user
+        ENV DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS="-p 0.0.0.0:2375:0.0.0.0:2375/tcp"
+        ENV PUID=1000
+        ENV PGID=1000
+
+        RUN <<EOFG
+        ln -s /home/ubuntu/mnt-links /var/mnt-links
+        ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
+        docker context create rootless --description "Rootless mode" --docker "host=unix:///var/run/user/docker.sock"
+        docker context use rootless
+
+        # groupadd -g $$PGID $$USERAPP
+        # useradd -u $$PUID -d $$USERHOME -g $$PGID $$USERAPP
+        # usermod -G users $$USERAPP
+        usermod --add-subuids 100000-165535 $$USERAPP
+        usermod --add-subgids 100000-165535 $$USERAPP
+        echo 'kernel.unprivileged_userns_clone=1' >> /etc/sysctl.d/userns.conf
+        echo 'net.ipv4.ip_unprivileged_port_start=0' >> /etc/sysctl.d/userns.conf
+        echo 'net.ipv6.conf.all.disable_ipv6=1' >> /etc/sysctl.d/userns.conf
+        echo 'fs.inotify.max_user_watches=524288' >> /etc/sysctl.d/userns.conf
+        echo 'fs.inotify.max_user_instances=8192' >> /etc/sysctl.d/userns.conf
+        mkdir -p $$XDG_RUNTIME_DIR
+        chown $$USERAPP:$$USERAPP $$XDG_RUNTIME_DIR
+        chmod 1777 $$XDG_RUNTIME_DIR
+        EOFG
+
+        RUN <<EOFG
+        cat <<'EOF' > /usr/bin/chromium-hl
+        #!/usr/bin/env bash
+        # exec xvfb-run --server-args="-screen 0 1920x1080x24" chromium --no-sandbox --disable-dev-shm-usage $$@
+        exec chromium --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu $$@
+        EOF
+        chmod 644 /usr/bin/chromium-hl 
+        chmod +x /usr/bin/chromium-hl
+        
+        cat <<'EOF' > /etc/profile.d/user-local-bin.sh
+        export USERLOCALBIN="$$HOME/.local/bin"
+        export USERDOTNETTOOLS="$$HOME/.dotnet/tools"
+        export CHROME_BIN="chromium-hl"
+        export PATH=$$PATH:$$USERLOCALBIN:$$USERDOTNETTOOLS
+        if [ ! -d "$$USERLOCALBIN" ]; then
+            mkdir -p "$$USERLOCALBIN"
+        fi
+        export NVM_DIR="$$HOME/.nvm"
+        export NVM_SOURCE="/opt/nvm"
+        if [ ! -d "$$NVM_DIR" ]; then
+            mkdir -p "$$NVM_DIR"
+        fi
+        [ -s "$$NVM_SOURCE/nvm.sh" ] && \. "$$NVM_SOURCE/nvm.sh"
+        [ -s "$$NVM_SOURCE/bash_completion" ] && \. "$$NVM_SOURCE/bash_completion"
+        EOF
+        chmod 644 /etc/profile.d/user-local-bin.sh
+        EOFG
+
+        RUN <<EOFG
+        cat <<'EOF' > /supervisord.conf
+        [supervisord]
+        nodaemon=true
+        user=root
+        pidfile=/var/run/supervisord.pid
+
+        [program:dockerd]
+        command=gosu %(ENV_USERAPP)s dockerd-rootless.sh --host=unix:///run/user/docker.sock
+        autostart=true
+        autorestart=true
+        stdout_logfile=/dev/stdout
+        stdout_logfile_maxbytes=0
+        stderr_logfile=/dev/stderr
+        stderr_logfile_maxbytes=0
+
+        [program:coder]
+        command=/startcoder-entrypoint.sh
+        autostart=true
+        autorestart=true
+        stdout_logfile=/dev/stdout
+        stdout_logfile_maxbytes=0
+        stderr_logfile=/dev/stderr
+        stderr_logfile_maxbytes=0
+        EOF
+
+        cat <<'EOF' > /startcoder-entrypoint.sh
+        #!/usr/bin/env bash
+        set -ex
+        if [ -d "$$USERHOME" ]; then
+          mkdir -p $$USERHOME/workspace
+          chown -R $$USERAPP:$$USERAPP $$USERHOME
+        fi
+        exec gosu $$USERAPP /startcoder-cmd.sh
+        EOF
+        chmod +x /startcoder-entrypoint.sh
+
+        cat <<'EOF' > /startcoder-cmd.sh
+        #!/usr/bin/env bash
+        set -ex
+        # export EXTENSIONS_GALLERY='{"serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery", "itemUrl": "https://marketplace.visualstudio.com/items"}'
+        export NODE_OPTIONS="--dns-result-order=ipv4first"
+        export VSCODE_PROXY_URI="http://{{port}}.coder.localhost"
+        /usr/bin/code-server --bind-addr "0.0.0.0:8080" --disable-telemetry --auth "none" --app-name "code-server" $$USERHOME/workspace
+        EOF
+        chmod +x /startcoder-cmd.sh
+
+        cat <<'EOF' > /entrypoint.sh
+        #!/usr/bin/env bash
+        set -ex
+        exec "$@"
+        EOF
+        chmod +x /entrypoint.sh
+
+        EOFG
+
+        ENV PS1="[coder] \u@\h:\[\033[0;36m\]\w\[\033[0m\]\$ "
+        ENTRYPOINT ["/entrypoint.sh"]
+        CMD ["/usr/bin/supervisord", "-c", "/supervisord.conf"]
+    network_mode: none
+    entrypoint: ["sleep", "1s"]

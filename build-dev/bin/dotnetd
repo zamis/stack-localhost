@@ -1,0 +1,4 @@
+#!/bin/bash
+PPWD="$(dirname "$PWD")"
+UIDGID=$(id -u):$(id -g)
+exec docker run -it --rm --net host -e UIDGID=$UIDGID -v ${HOME}:/home/ubuntu -v ${PPWD}/:${PPWD} -w ${PWD} localhost/dotnet $@
