@@ -1,0 +1,198 @@
+name: stack-dev-ubuntu-new
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  tmp1:
+
+services:
+  ubuntu-new:
+    restart: no
+    privileged: true
+    security_opt:
+      - seccomp:unconfined
+    build:
+      dockerfile_inline: |
+        FROM ubuntu:26.04
+
+        RUN apt update
+        RUN apt install software-properties-common -y
+        RUN add-apt-repository universe -y
+        RUN apt update
+        RUN apt install -y supervisor gosu sudo uidmap iproute2 iputils-ping openssl
+        RUN apt install -y xvfb lightdm
+        RUN apt install -y lightdm-gtk-greeter
+        RUN apt install -y xfce4 xfce4-goodies
+        RUN apt install -y x11vnc novnc websockify dbus-x11
+        RUN apt install -y tigervnc-standalone-server
+        RUN apt install -y xauth
+        RUN apt install -y librsvg2-common ubuntu-wallpapers adwaita-icon-theme
+
+        ENV XDG_RUNTIME_DIR=/run/user
+        ENV DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS="-p 0.0.0.0:2375:0.0.0.0:2375/tcp"
+
+        RUN <<EOF
+        dbus-uuidgen --ensure=/etc/machine-id
+        sed -i '/pam_systemd.so/s/^/#/' /etc/pam.d/common-session
+        sed -i 's/required/optional/g' /etc/pam.d/common-session
+        sed -i '/pam_systemd/d' /etc/pam.d/common-session
+
+        useradd -m -s /bin/bash abc && echo "abc:abc" | chpasswd && adduser abc sudo
+        echo 'abc ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers.d/user
+        
+        mkdir -p /var/lib/lightdm/data /var/log/lightdm /var/run/lightdm /run/user/106
+        chown -R lightdm:lightdm /var/lib/lightdm /var/log/lightdm /var/run/lightdm
+        chmod 0711 /run/user/106
+
+        mkdir -p /var/log/supervisor /var/run/dbus /etc/lightdm/lightdm.conf.d
+
+        echo 'kernel.unprivileged_userns_clone=1' >> /etc/sysctl.d/userns.conf
+        echo 'net.ipv4.ip_unprivileged_port_start=0' >> /etc/sysctl.d/userns.conf
+        echo 'fs.inotify.max_user_watches=524288' >> /etc/sysctl.d/userns.conf
+        echo 'fs.inotify.max_user_instances=8192' >> /etc/sysctl.d/userns.conf
+        mkdir -p $$XDG_RUNTIME_DIR && chown abc:abc $$XDG_RUNTIME_DIR && chmod 1777 $$XDG_RUNTIME_DIR
+        usermod --add-subuids 100000-165535 abc
+        usermod --add-subgids 100000-165535 abc
+        EOF
+
+        RUN <<EOF
+        # echo "[LightDM]
+        # start-default-seat=true
+        # logind-check-graphical=false
+
+        # # Add these two lines to bypass systemd-logind seat & session registration:
+        # run-directory=/run/lightdm
+        # sessions-directory=/usr/share/xsessions
+
+        # [Seat:*]
+        # # Force LightDM to treat this seat as local and static without logind's help
+        # seat-transient=false
+        # type=local
+
+        # xserver-command=Xvnc -SecurityTypes None -geometry 1280x800 -depth 24
+        # session-wrapper=/etc/X11/Xsession
+        # greeter-session=lightdm-gtk-greeter
+        # greeter-show-manual-login=true
+        # greeter-hide-users=false
+        # " > /etc/lightdm/lightdm.conf
+
+        echo "[LightDM]
+        start-default-seat=false
+        logind-check-graphical=false
+
+        [Seat:*]
+        pam-service=lightdm-autologin
+
+        [VNCServer]
+        enabled=true
+        # command=Xvnc -SecurityTypes None
+        listen-address=127.0.0.1
+        port=5900
+        width=1280
+        height=800
+        depth=24
+
+        [greeter]
+        background = #2c3e50
+        indicators = ~host
+        " > /etc/lightdm/lightdm.conf
+        EOF
+
+        RUN <<EOF
+        # 1. Force LightDM to bypass standard PAM sessions that hook into systemd
+        echo "auth      required    pam_permit.so
+        account   required    pam_permit.so
+        session   required    pam_permit.so
+        password  required    pam_permit.so" > /etc/pam.d/lightdm
+
+        echo "auth      required    pam_permit.so
+        account   required    pam_permit.so
+        session   required    pam_permit.so
+        password  required    pam_permit.so" > /etc/pam.d/lightdm-greeter
+
+        echo "auth      required    pam_permit.so
+        account   required    pam_permit.so
+        session   required    pam_permit.so
+        password  required    pam_permit.so" > /etc/pam.d/lightdm-autologin
+        EOF
+
+        RUN cat << 'EOF' > /etc/supervisor/conf.d/supervisord.conf
+        [supervisord]
+        nodaemon=true
+        user=root
+        logfile=/var/log/supervisor/supervisord.log
+        pidfile=/var/run/supervisord.pid
+
+        [program:dbus]
+        command=dbus-daemon --system --nofork
+        autorestart=true
+        priority=1
+        stdout_logfile=/dev/stdout
+        stdout_logfile_maxbytes=0
+        stderr_logfile=/dev/stderr
+        stderr_logfile_maxbytes=0
+
+        # [program:xvfb]
+        # command=Xvfb :0 -screen 0 1280x800x24 -listen tcp
+        # autorestart=true
+        # priority=2
+
+        [program:lightdm]
+        command=/usr/sbin/lightdm
+        autorestart=true
+        priority=3
+        # LightDM needs some time for Xvfb and dbus to fully warm up
+        startsecs=3
+        stdout_logfile=/dev/stdout
+        stdout_logfile_maxbytes=0
+        stderr_logfile=/dev/stderr
+        stderr_logfile_maxbytes=0
+
+        # [program:x11vnc]
+        # # -auth guess allows x11vnc to find the dynamically generated LightDM/X11 auth file
+        # command=bash -c "sleep 4 && x11vnc -display :0 -auth guess -forever -shared -rfbport 5900"
+        # autorestart=true
+        # priority=4
+        # startsecs=3
+
+        # [program:novnc]
+        # command=websockify --web=/usr/share/novnc/ 6901 127.0.0.1:5900
+        # autorestart=true
+        # priority=5
+
+        [program:novnc]
+        command=bash -c "sleep 2 && /usr/share/novnc/utils/novnc_proxy --vnc 127.0.0.1:5900 --listen 6901"
+        autorestart=true
+        priority=5
+        stdout_logfile=/dev/stdout
+        stdout_logfile_maxbytes=0
+        stderr_logfile=/dev/stderr
+        stderr_logfile_maxbytes=0
+        EOF
+
+        EXPOSE 6901
+        CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+    shm_size: 1gb
+    networks:
+      - my-network-proxy
+    expose:
+      - 6901
+    # devices:
+    #   - /dev/fuse:/dev/fuse
+    #   - /dev/usb:/dev/usb
+    #   - /dev/bus/usb:/dev/bus/usb
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+      virtual.caddyfile: |
+        http://ubuntu-new.localhost {
+          reverse_proxy ubuntu-new:6901 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://ubuntu-new.localhost">ubuntu-new</a>
+          <small>http://ubuntu-new.localhost</small>
+        </div>

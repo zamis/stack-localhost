@@ -1,0 +1,47 @@
+name: stack-tool-freenet
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-tool-freenet-config:
+    external: true
+  stack-tool-freenet-data:
+    external: true
+
+services:
+  freenet-node:
+    restart: no
+    image: queeup/freenet-container:v0.2.103
+    networks:
+      - my-network-proxy
+    expose:
+      - 7509
+      - 12345
+      - 12346
+    volumes:
+      - stack-tool-freenet-config:/config
+      - stack-tool-freenet-data:/data
+    environment:
+      RUST_LOG: "freenet=debug"
+      FREENET_TELEMETRY_ENABLED: false
+      WS_API_PORT: 7509
+      CONFIG_DIR: /config
+      DATA_DIR: /data
+    labels:
+      virtual.caddyfile: |
+        http://freenet-node.localhost {
+          reverse_proxy freenet-node:7509 {
+            header_up Host "127.0.0.1:7509"
+            header_down Host "freenet-node.localhost:80"
+            header_down -Content-Security-Policy
+            header_down -X-Content-Security-Policy
+            header_down -X-WebKit-CSP
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://freenet-node.localhost">freenet-node</a>
+          <small>http://freenet-node.localhost</small>
+        </div>

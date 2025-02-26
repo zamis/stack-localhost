@@ -1,0 +1,56 @@
+name: stack-llm-openwebui
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-llm-openwebui-app-backend-data:
+    external: true
+
+services:
+  openwebui:
+    restart: no
+    image: localhost/open-webui
+    build:
+      dockerfile_inline: |
+        FROM ghcr.io/open-webui/open-webui:0.10.2
+        USER root
+        ENV USERAPP=webui
+        RUN apt update && apt install -y gosu
+        RUN groupadd $$USERAPP && useradd -g $$USERAPP $$USERAPP
+        RUN chown -R $$USERAPP:$$USERAPP /app/backend/data
+
+        RUN cat << 'EOF' > /entrypoint.sh
+        #!/usr/bin/env bash
+        set -ex
+        if [ -d "/app/backend" ]; then
+          chown -R $$USERAPP:$$USERAPP /app/backend
+        fi
+        exec gosu $$USERAPP "$@"
+        EOF
+        RUN chmod +x /entrypoint.sh
+
+        WORKDIR /app/backend
+        ENTRYPOINT ["/entrypoint.sh"]
+        CMD ["/app/backend/start.sh"]
+        # USER webui
+    networks:
+      - my-network-proxy
+    expose:
+      - 8080
+    volumes:
+      - stack-llm-openwebui-app-backend-data:/app/backend/data
+    environment:
+      - HF_HUB_OFFLINE=1
+    labels:
+      virtual.caddyfile: |
+        http://openwebui.localhost {
+          reverse_proxy http://openwebui:8080 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://openwebui.localhost">Open Web UI</a>
+          <small>http://openwebui.localhost</small>
+        </div>

@@ -1,0 +1,141 @@
+name: stack-tool-coder
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-tool-coder-config:
+    external: true
+
+services:  
+  coder:
+    restart: unless-stopped
+    image: localhost/code-server
+    build:
+      dockerfile_inline: |
+        FROM docker.io/library/ubuntu:26.04@sha256:3131b4cc82a783df6c9df078f86e01819a13594b865c2cad47bd1bca2b7063bb
+
+        RUN apt update
+        RUN apt install -y sudo apt-utils gosu supervisor
+        RUN apt install -y curl gnupg ca-certificates openssl ssh git iputils-ping nmap socat encfs uidmap iproute2
+
+        RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+        RUN apt-get update && apt-get install -y nodejs
+        RUN curl -fsSL https://get.docker.com | sh
+        RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --prefix=/usr/local --version "4.130.0"
+
+        ARG TARGETARCH
+        ENV USERAPP=ubuntu
+        ENV USERHOME=/home/ubuntu
+        ENV XDG_RUNTIME_DIR=/run/user
+        ENV DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS="-p 0.0.0.0:2375:0.0.0.0:2375/tcp"
+        ENV PUID=1000
+        ENV PGID=1000
+
+        RUN <<EOF
+        # groupadd -g $$PGID $$USERAPP
+        # useradd -u $$PUID -d $$USERHOME -g $$PGID $$USERAPP
+        # usermod -G users $$USERAPP
+        usermod --add-subuids 100000-165535 $$USERAPP
+        usermod --add-subgids 100000-165535 $$USERAPP
+        echo 'kernel.unprivileged_userns_clone=1' >> /etc/sysctl.d/userns.conf
+        echo 'net.ipv4.ip_unprivileged_port_start=0' >> /etc/sysctl.d/userns.conf
+        echo 'fs.inotify.max_user_watches=524288' >> /etc/sysctl.d/userns.conf
+        echo 'fs.inotify.max_user_instances=8192' >> /etc/sysctl.d/userns.conf
+        mkdir -p $$XDG_RUNTIME_DIR
+        chown $$USERAPP:$$USERAPP $$XDG_RUNTIME_DIR
+        chmod 1777 $$XDG_RUNTIME_DIR
+        EOF
+
+        RUN cat << 'EOF' > /supervisord.conf
+        [supervisord]
+        nodaemon=true
+        user=root
+        pidfile=/var/run/supervisord.pid
+
+        [program:dockerd]
+        command=gosu  %(ENV_USERAPP)s dockerd-rootless.sh --host=unix:///run/user/docker.sock
+        autostart=true
+        autorestart=true
+        stdout_logfile=/dev/stdout
+        stdout_logfile_maxbytes=0
+        stderr_logfile=/dev/stderr
+        stderr_logfile_maxbytes=0
+
+        [program:coder]
+        command=gosu %(ENV_USERAPP)s /usr/bin/code-server --bind-addr "[::]:8080" --user-data-dir %(ENV_USERHOME)s/data --extensions-dir %(ENV_USERHOME)s/extensions --disable-telemetry --auth "none" --app-name "code-server" %(ENV_USERHOME)s/workspace
+        autostart=true
+        autorestart=true
+        stdout_logfile=/dev/stdout
+        stdout_logfile_maxbytes=0
+        stderr_logfile=/dev/stderr
+        stderr_logfile_maxbytes=0
+        EOF
+
+        RUN cat << 'EOF' > /entrypoint.sh
+        #!/usr/bin/env bash
+        set -ex
+        if [ -d "$$USERHOME" ]; then
+          mkdir -p $$USERHOME/workspace
+          chown -R $$USERAPP:$$USERAPP $$USERHOME
+        fi
+        exec "$@"
+        EOF
+        RUN chmod +x /entrypoint.sh
+
+        ENTRYPOINT ["/entrypoint.sh"]
+        CMD ["/usr/bin/supervisord", "-c", "/supervisord.conf"]
+    privileged: true
+    networks:
+      - my-network-proxy
+    expose:
+      - 8080
+    environment:
+      - USERHOME=/home/ubuntu
+    configs:
+      - source: ssh_config
+        target: /home/ubuntu/.ssh/config
+        mode: 0600
+        uid: "1000"
+        gid: "1000"
+      - source: context_host
+        target: /home/ubuntu/.docker/contexts/meta/4740ae6347b0172c01254ff55bae5aff5199f4446e7f6d643d40185b3f475145/meta.json
+        mode: 0444
+        uid: "1000"
+        gid: "1000"
+      - source: context_rootless
+        target: /home/ubuntu/.docker/contexts/meta/12b961af5feb3e9d39f93b2cefb9a1a944f18d02cca0cac2f04f5a982240605f/meta.json
+        mode: 0444
+        uid: "1000"
+        gid: "1000"
+    volumes:
+    #   - /var/run:/var/run-host:rw
+      - stack-tool-coder-config:/home/ubuntu
+      - /var/mnt-links/shared-projects:/external/shared-projects:rw
+      - /var/mnt-links/shared-local:/var/mnt-links/shared-local:rw
+    labels:
+      virtual.caddyfile: |
+        http://coder.localhost {
+          reverse_proxy http://coder:8080 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://coder.localhost">coder</a>
+          <small>http://coder.localhost</small>
+        </div>
+
+
+configs:
+  ssh_config:
+    content: |
+      Host *
+        IdentityFile /external/shared-projects/home/.ssh/id_rsa
+        IdentitiesOnly yes
+  context_host:
+    content: |
+      {"Name":"host","Metadata":{"Description":"Host mode"},"Endpoints":{"docker":{"Host":"unix:///var/run-host/docker.sock","SkipTLSVerify":false}}}
+  context_rootless:
+    content: |
+      {"Name":"rootless","Metadata":{"Description":"Rootless mode"},"Endpoints":{"docker":{"Host":"unix:///var/run/user/docker.sock","SkipTLSVerify":false}}}
