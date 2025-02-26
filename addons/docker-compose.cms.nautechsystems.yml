@@ -1,0 +1,28 @@
+name: stack-cms-nautechsystems
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  jupyterlab:
+    image: ghcr.io/nautechsystems/jupyterlab:latest
+    restart: no
+    networks:
+      - my-network-proxy
+    expose:
+      - 8888
+    environment:
+      SPA: 1
+    labels:
+      virtual.caddyfile: |
+        http://jupyterlab.cms.localhost {
+          reverse_proxy http://jupyterlab:8888 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://jupyterlab.cms.localhost">jupyterlab</a>
+          <small>http://jupyterlab.cms.localhost</small>
+        </div>
