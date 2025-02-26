@@ -1,0 +1,52 @@
+name: stack-fs-nextexplorer
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-fs-nextexplorer-config:
+    external: true
+  shared-documents:
+    external: true
+  shared-projects:
+    external: true
+  shared-media:
+    external: true
+  shared-local:
+    external: true
+  stack-tool-syncthing-folders:
+    external: true
+  tmp-cache:
+
+services:
+  nextexplorer:
+    restart: unless-stopped
+    image: nxzai/explorer:v2.2.7
+    networks:
+      - my-network-proxy
+    expose:
+      - 3000
+    environment:
+      TMP: "/tmp"
+    tmpfs:
+      - /mnt:size=1M
+    volumes:
+      - tmp-cache:/cache
+      - stack-fs-nextexplorer-config:/config
+      - shared-documents:/mnt/shared-documents:rw
+      - shared-projects:/mnt/shared-projects:rw
+      - shared-media:/mnt/shared-media:rw
+      - shared-local:/mnt/shared-local:rw
+      - stack-tool-syncthing-folders:/mnt/syncthing-folders:rw
+    labels:
+      virtual.caddyfile: |
+        http://nextexplorer.localhost {
+          reverse_proxy http://nextexplorer:3000 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://nextexplorer.localhost">nextexplorer</a>
+          <small>http://nextexplorer.localhost</small>
+        </div>

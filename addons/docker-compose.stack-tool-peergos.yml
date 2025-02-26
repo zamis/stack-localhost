@@ -1,0 +1,64 @@
+name: stack-tool-peergos
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-tool-peergos-data:
+    # external: true
+
+services:
+  peergos:
+    restart: unless-stopped
+    image: localhost/peergos
+    build:
+      dockerfile_inline: |
+        FROM ghcr.io/peergos/web-ui:v1.29.0
+        RUN apt-get update
+        RUN apt-get install -y socat nmap
+
+        RUN echo -e '#!/bin/sh\necho "Браузер ігнорується: $1"' > /usr/bin/xdg-open
+        RUN chmod +x /usr/bin/xdg-open
+
+        EXPOSE 4001 8001
+        ENTRYPOINT socat TCP-LISTEN:8001,fork TCP4-CONNECT:localhost:7777 & java --enable-native-access=ALL-UNNAMED -jar /opt/peergos/server/Peergos.jar -domain 0.0.0.0 -public-domain peergos:7777 -listen-host 0.0.0.0 --host-names 127.0.0.1,peergos,localhost,peergos.localhost -log-to-console true
+    networks:
+      - my-network-proxy
+    extra_hosts:
+      - host:host-gateway      
+    expose:
+      - 4001 # libp2p
+      - 8001 # WEB
+    volumes:
+      - stack-tool-peergos-data:/opt/peergos/data
+    labels:
+      virtual.caddyfile: |
+        http://peergos.localhost {
+          reverse_proxy peergos:8001 {
+            header_up Host "localhost:7777"
+            header_down Host "peergos.localhost"
+            header_up X-Forwarded-Host "localhost:7777"
+            header_down X-Forwarded-Host "peergos.localhost"
+            header_up X-Real-IP "localhost"
+            header_down X-Real-IP "peergos.localhost"
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://peergos.localhost">peergos</a>
+          <small>http://peergos.localhost</small>
+        </div>
+
+  peergos-daemon:
+    image: ghcr.io/peergos/web-ui:v1.29.0
+    entrypoint: "java --enable-native-access=ALL-UNNAMED -jar /opt/peergos/server/Peergos.jar daemon -domain 0.0.0.0 -public-domain peergos-daemon -listen-host 0.0.0.0 --host-names 127.0.0.1,peergos-daemon,localhost -log-to-console true"
+    restart: unless-stopped
+    networks:
+      - my-network-proxy
+    extra_hosts:
+      - host:host-gateway      
+    expose:
+      - 4001 # libp2p
+    volumes:
+      - stack-tool-peergos-data:/opt/peergos/data
