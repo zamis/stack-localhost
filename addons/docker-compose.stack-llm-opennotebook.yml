@@ -1,0 +1,49 @@
+name: stack-llm-opennotebook
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-llm-opennotebook-data:
+    external: true
+  stack-llm-opennotebook-surreal:
+    external: true
+
+services:
+  opennotebook:
+    restart: no
+    image: ghcr.io/lfnovo/open-notebook:1.14.0-single
+    networks:
+      - my-network-proxy
+    expose:
+      - 8502
+      - 5055
+    volumes:
+      - stack-llm-opennotebook-data:/app/data:mode=0777
+      - stack-llm-opennotebook-surreal:/mydata:mode=0777
+    environment:
+      - API_URL=http://api.opennotebook.localhost
+      - NEXT_PUBLIC_API_URL=http://api.opennotebook.localhost
+      - INTERNAL_API_URL=http://opennotebook:5055
+      - OPEN_NOTEBOOK_ENCRYPTION_KEY=QjQVVaNJIs81D0No6aJu9ctp5UvWFquJywDem2B8Tfs=
+      - SURREAL_URL=ws://db-surrealdb/rpc:8000
+      - SURREAL_USER=root
+      - SURREAL_PASSWORD=root
+      - SURREAL_NAMESPACE=open_notebook
+      - SURREAL_DATABASE=open_notebook
+    labels:
+      virtual.caddyfile: |
+        http://opennotebook.localhost {
+          reverse_proxy http://opennotebook:8502 {
+          }
+        }
+        http://api.opennotebook.localhost {
+          reverse_proxy http://opennotebook:5055 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://opennotebook.localhost">opennotebook</a>
+          <small>http://opennotebook.localhost</small>
+        </div>
