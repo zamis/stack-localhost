@@ -1,0 +1,39 @@
+name: stack-net-rustdesk-server
+
+networks:
+  rustdesk-net:
+
+services:
+  hbbs:
+    image: rustdesk/rustdesk-server:latest
+    container_name: hbbs
+    ports:
+      - 21115:21115
+      - 21116:21116
+      - 21116:21116/udp
+      - 21118:21118
+    environment:
+      - ALWAYS_USE_RELAY=Y
+    # command: hbbs -r rustdesk.example.com:21117
+    command: hbbs -r hbbr:21117
+    # command: hbbs
+    volumes:
+      - /var/mnt-links/docker/rustdesk-server/root:/root
+    networks:
+      - rustdesk-net
+    depends_on:
+      - hbbr
+    restart: unless-stopped
+
+  hbbr:
+    image: rustdesk/rustdesk-server:latest
+    container_name: hbbr
+    ports:
+      - 21117:21117
+      - 21119:21119
+    command: hbbr
+    volumes:
+      - /var/mnt-links/docker/rustdesk-server/root:/root
+    networks:
+      - rustdesk-net
+    restart: unless-stopped

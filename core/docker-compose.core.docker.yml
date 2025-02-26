@@ -1,0 +1,23 @@
+name: stack-core-docker
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  dind-dev:
+    image: docker:28.4.0-dind
+    restart: always
+    privileged: true
+    hostname: dind-dev
+    networks:
+      - my-network-proxy
+    environment:
+      - DOCKER_TLS_CERTDIR=/certs
+    volumes:
+      - /var/mnt-links/docker/dind-dev/certs:/certs
+      - /var/mnt-links/docker/dind-dev/var/lib/docker:/var/lib/docker
+      - /var/mnt-links/docker/dind-dev/var/run:/var/run
+      - /var/mnt-links/docker/dind-dev/var/mnt-links/docker:/var/mnt-links/docker
+      - /var/mnt-links/docker/dind-dev/var/mnt-links/media:/var/mnt-links/media

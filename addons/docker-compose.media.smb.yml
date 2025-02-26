@@ -1,0 +1,60 @@
+name: stack-media-smb
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  tmp2:
+
+services:
+  service-smb:
+    image: ghcr.io/servercontainers/samba:a3.22.1-s4.21.4-r4
+    restart: always
+    cap_add:
+      - NET_ADMIN
+      - NET_BROADCAST
+    # network_mode: host
+    networks:
+      - my-network-proxy
+    expose:
+      - 137
+      - 139
+      - 445
+    ports:
+      - 137:137/udp
+      - 139:139
+      - 445:445
+    environment:
+      MODEL: TimeCapsule
+      AVAHI_NAME: ${USER_HOSTNAME:?error}.local
+      SAMBA_CONF_LOG_LEVEL: 3
+      SAMBA_VOLUME_CONFIG_guestmultilineexample: |
+        [Share]
+        path = /shares/Share
+        guest ok = yes
+        browseable = yes
+        read only = yes
+        
+        [Guest]
+        path = /shares/guest
+        guest ok = yes
+        browseable = yes
+        read only = no
+        writeable = yes
+        inherit owner = yes
+        create mask = 777
+        directory mask = 777
+        force create mode = 777
+        force directory mode = 777
+        force user = root
+        force group = root
+    volumes:
+      - /etc/avahi/services/:/external/avahi
+      - tmp2:/shares
+      - /var/mnt-links/media/films:/shares/Share/films:ro
+      - /var/mnt-links/media/video:/shares/Share/video:ro
+      - /var/mnt-links/media/music:/shares/Share/music:ro
+      - /var/mnt-links/media/downloads:/shares/Share/downloads:ro
+      - /var/mnt-links/media/guest:/shares/guest:rw
