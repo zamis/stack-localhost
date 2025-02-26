@@ -1,0 +1,57 @@
+name: stack-cms-filebrowser
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  srv:
+  config:
+  database:
+
+services:
+  filebrowser:
+    image: filebrowser/filebrowser:v2.43.0
+    command: --noauth --port=80 --root=/srv --database=/database/filebrowser.db
+    restart: unless-stopped
+    user: root
+    configs:
+      - source: settings
+        target: /config/settings.json
+    networks:
+      - my-network-proxy
+    expose:
+      - 80
+    environment:
+      HOME: "/srv"
+      CONFIG: "/config"
+    volumes:
+      - srv:/srv:ro
+      - config:/config
+      - database:/database
+      - /var/mnt-links/media:/srv/media:rw
+      - /var/mnt-links/docker/volumes:/srv/docker:ro
+    labels:
+      virtual.caddyfile: |
+        http://filebrowser.localhost {
+          reverse_proxy http://filebrowser:80 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://filebrowser.localhost">filebrowser</a>
+          <small>http://filebrowser.localhost</small>
+        </div>
+
+configs:
+  settings:
+    content: |
+      {
+        "port": 80,
+        "baseURL": "",
+        "address": "",
+        "log": "stdout",
+        "database": "/database/filebrowser.db",
+        "root": "/srv"
+      }

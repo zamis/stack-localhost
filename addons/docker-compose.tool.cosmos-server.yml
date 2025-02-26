@@ -1,0 +1,30 @@
+name: stack-tool-cosmos-server
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  cosmos-server:
+    image: azukaar/cosmos-server
+    restart: no
+    networks:
+      - my-network-proxy
+    expose:
+      - 80
+      - 443
+      - 4242
+    volumes:
+      - /var/mnt-links/docker/volumes/cosmos-server/config:/config
+    labels:
+      virtual.caddyfile: |
+        http://cosmos-server.localhost {
+          reverse_proxy http://cosmos-server:80 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://cosmos-server.localhost">cosmos-server</a>
+          <small>http://cosmos-server.localhost</small>
+        </div>
