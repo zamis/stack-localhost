@@ -1,0 +1,80 @@
+name: stack-dev-helpers
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  backup:
+  stack-dev-helpers-cloudbeaver-workspace:
+    external: true
+  stack-dev-helpers-pgadmin-data:
+    external: true
+
+services:
+  cyberchef:
+    image: ghcr.io/gchq/cyberchef:10.22.1
+    restart: unless-stopped
+    networks:
+      - my-network-proxy
+    expose:
+      - 80
+    labels:
+      virtual.caddyfile: |
+        http://cyberchef.dev.localhost {
+          reverse_proxy cyberchef:80 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://cyberchef.dev.localhost">cyberchef</a>
+          <small>http://cyberchef.dev.localhost</small>
+        </div>
+
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:25.3.5
+    restart: unless-stopped
+    networks:
+      - my-network-proxy
+    expose:
+      - 8978
+    volumes:
+      - stack-dev-helpers-cloudbeaver-workspace:/opt/cloudbeaver/workspace
+    labels:
+      virtual.caddyfile: |
+        http://cloudbeaver.dev.localhost {
+          reverse_proxy cloudbeaver:8978 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://cloudbeaver.dev.localhost">cloudbeaver</a>
+          <small>http://cloudbeaver.dev.localhost</small>
+        </div>
+
+  pgadmin:
+    image: dpage/pgadmin4:9.12.0
+    restart: always
+    user: root
+    networks:
+      - my-network-proxy
+    expose:
+      - 80
+    environment:
+      PGADMIN_DEFAULT_EMAIL: pgadmin@email.com
+      PGADMIN_DEFAULT_PASSWORD: r74Qsg7jdwUfryM
+      GLOBALLY_DELIVERABLE: false
+    volumes:
+      - stack-dev-helpers-pgadmin-data:/var/lib/pgadmin
+    labels:
+      virtual.caddyfile: |
+        http://pgadmin.localhost {
+          reverse_proxy http://pgadmin:80 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://pgadmin.localhost">pgadmin</a>
+          <small>http://pgadmin.localhost</small>
+        </div>

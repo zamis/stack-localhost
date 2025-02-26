@@ -1,0 +1,82 @@
+name: stack-core-browser
+
+networks:
+  my-network-public:
+    name: my-network-public
+    external: true
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+volumes:
+  stack-core-browser-config:
+    external: true
+
+services:
+  core-browser:
+    image: jlesage/firefox:v26.02.2
+    restart: unless-stopped
+    configs:
+      - source: forward-port-80-run
+        target: etc/services.d/port80/run
+        mode: 0555
+      - source: forward-port-443-run
+        target: etc/services.d/port443/run
+        mode: 0555
+      - source: empty
+        target: etc/services.d/app/port80.dep
+      - source: empty
+        target: etc/services.d/app/port443.dep
+    shm_size: 2gb
+    networks:
+      - my-network-public
+      - my-network-proxy
+    expose:
+      - 5800
+    environment:
+      INSTALL_PACKAGES: "socat"
+      SECURE_CONNECTION: 1
+      VNC_PASSWORD: "123"
+      WEB_AUDIO: 1
+      WEB_FILE_MANAGER: 1
+      DARK_MODE: 1
+      # DISPLAY_WIDTH: 1920
+      # DISPLAY_HEIGHT: 1080
+      KEEP_APP_RUNNING: 1
+      TZ: Europe/Vienna
+      FF_OPEN_URL: "http://home.localhost"
+    volumes:
+      - stack-core-browser-config:/config:rw
+    labels:
+      virtual.caddyfile: |
+        http://core-browser.localhost {
+          reverse_proxy core-browser:5800 {
+            transport http {
+              tls
+              tls_insecure_skip_verify
+            }
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://core-browser.localhost?resize=remote">Browser</a>
+          <small>http://core-browser.localhost</small>
+        </div>
+
+configs:
+  empty:
+    content: ' '
+
+  forward-port-80-run:
+    content: |
+      #!/bin/sh
+
+      set -e
+      socat TCP4-LISTEN:80,fork TCP4:proxy-int:80
+
+  forward-port-443-run:
+    content: |
+      #!/bin/sh
+
+      set -e
+      socat TCP4-LISTEN:443,fork TCP4:proxy-int:443
