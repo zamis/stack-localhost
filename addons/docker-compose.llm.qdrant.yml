@@ -1,0 +1,38 @@
+name: stack-llm-qdrant
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+configs:
+  qdrant_config:
+    content: |
+      log_level: INFO
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.15.4
+    restart: always
+    networks:
+      - my-network-proxy
+    expose:
+      - 6333
+      - 6334
+      - 6335
+    configs:
+      - source: qdrant_config
+        target: /qdrant/config/production.yaml
+    volumes:
+      - /var/mnt-links/docker/qdrant/qdrant/storage:/qdrant/storage
+    labels:
+      virtual.caddyfile: |
+        http://qdrant.llm.localhost {
+          reverse_proxy http://qdrant:6333 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://qdrant.llm.localhost/dashboard">qdrant.llm</a>
+          <small>http://qdrant.llm.localhost/dashboard</small>
+        </div>

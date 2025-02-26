@@ -1,0 +1,70 @@
+name: stack-media-nextcloud
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  nextcloud:
+    build:
+      dockerfile_inline: |
+        FROM nextcloud:31.0.9
+        RUN apt-get update
+        RUN apt-get install -y sudo
+    image: localhost/nextcloud
+    restart: always
+    networks:
+      - my-network-proxy
+    volumes:
+      - /var/mnt-links/docker/nextcloud/var/www/html:/var/www/html
+    expose:
+      - 80
+      - 443
+    labels:
+      virtual.caddyfile: |
+        http://nextcloud.media.localhost {
+          header /* {
+            Strict-Transport-Security "max-age=15552000;"
+          }
+          redir /.well-known/carddav /remote.php/dav/ 301
+          redir /.well-known/caldav /remote.php/dav/ 301
+          reverse_proxy http://nextcloud:80 {
+            transport http {
+            }
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://nextcloud.media.localhost">nextcloud</a>
+          <small>http://nextcloud.media.localhost</small>
+        </div>
+
+  collaboracode:
+    image: collabora/code:25.04.4.2.1
+    restart: always
+    cap_add:
+      - MKNOD
+    hostname: collaboracode.media.localhost
+    networks:
+      - my-network-proxy
+    expose:
+      - 9980
+    environment:
+      - server_name=collaboracode.media.localhost
+      - aliasgroup1=http://nextcloud.media.localhost
+      - domain=nextcloud.media.localhost
+      - username=admin
+      - password=admin
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=false --o:logging.level=warning
+    labels:
+      virtual.caddyfile: |
+        http://collaboracode.media.localhost {
+          reverse_proxy http://collaboracode:9980 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://collaboracode.media.localhost/hosting/discovery">collaboracode</a>
+          <small>http://collaboracode.media.localhost/hosting/discovery</small>
+        </div>
