@@ -1,0 +1,59 @@
+name: stack-net-anywherelan
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:
+  anywherelan:
+    image: localhost/awl
+    build:
+      dockerfile_inline: |
+        FROM ubuntu:24.04
+        RUN apt update 
+        RUN apt install -y curl zenity
+        RUN apt install -y net-tools
+        RUN mkdir app && cd app
+        RUN curl -L https://github.com/anywherelan/awl/releases/download/v0.13.0/awl-linux-amd64-v0.13.0.tar.gz | tar -xzvf -
+        RUN apt install -y socat nmap
+
+        entrypoint ["/entrypoint.sh"]
+    restart: unless-stopped
+    configs:
+      - source: entrypoint
+        target: /entrypoint.sh
+        mode: 0555
+    cap_add:
+      - NET_ADMIN
+    networks:
+      - my-network-proxy
+    expose:
+      - 80 # Web UI
+      - 53 # DNS
+      - 8080 # socks5
+      - 8639 # API
+    volumes:
+      - /var/mnt-links/docker/anywherelan/root/.config/anywherelan:/root/.config/anywherelan
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    labels:
+      virtual.caddyfile: |
+        http://anywherelan.net.localhost {
+          reverse_proxy anywherelan:81 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://anywherelan.net.localhost">awl</a>
+          <small>http://anywherelan.net.localhost</small>
+        </div>
+
+configs:
+  entrypoint:
+    content: |
+      #!/bin/sh
+
+      set -e
+      socat TCP4-LISTEN:81,fork TCP4:127.0.0.66:80 &
+      /awl
