@@ -1,0 +1,30 @@
+name: stack-cms-code-server
+
+networks:
+  my-network-proxy:
+    name: my-network-proxy
+    external: true
+
+services:  
+  code-server:
+    image: linuxserver/code-server:4.105.1
+    restart: always
+    networks:
+      - my-network-proxy
+    expose:
+      - 8443
+    volumes:
+      - /var/mnt-links/docker/code-server/config:/config
+      - /var/mnt-links/media:/external/media:rw
+      - /var/mnt-links/docker:/external/docker:ro
+    labels:
+      virtual.caddyfile: |
+        http://code-server.localhost {
+          reverse_proxy http://code-server:8443 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://code-server.localhost">code-server</a>
+          <small>http://code-server.localhost</small>
+        </div>
