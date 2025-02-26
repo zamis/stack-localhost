@@ -1,0 +1,38 @@
+name: stack-cms-nextexplorer
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  tmp-config:
+  tmp-cache:
+
+services:
+  nextexplorer:
+    image: nxzai/explorer:v2.2.3
+    restart: unless-stopped
+    networks:
+      - my-network-proxy
+    expose:
+      - 3000
+    environment:
+      TMP: "/tmp"
+    tmpfs:
+      - /mnt:size=1M
+    volumes:
+      - tmp-config:/config
+      - tmp-cache:/cache
+      - /var/mnt-links/share-media:/mnt/share-media:rw
+      - /var/mnt-links/share-local:/mnt/share-local:rw
+    labels:
+      virtual.caddyfile: |
+        http://nextexplorer.localhost {
+          reverse_proxy http://nextexplorer:3000 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://nextexplorer.localhost">nextexplorer</a>
+          <small>http://nextexplorer.localhost</small>
+        </div>

@@ -1,0 +1,43 @@
+name: stack-core-dockge
+
+networks:
+  my-network-public:
+    external: true
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-core-docker-dind-dev-run:
+    external: true
+  stack-core-dockge-app-data:
+    name: stack-core-dockge-app-data
+    external: false
+  stack-core-dockge-opt-stacks:
+    name: stack-core-dockge-opt-stacks
+    external: false
+
+services:
+  dockge:
+    image: louislam/dockge:1.5.0
+    restart: no
+    networks:
+      - my-network-public
+      - my-network-proxy
+    expose:
+      - 5001
+    volumes:
+      - stack-core-dockge-app-data:/app/data
+      - stack-core-dockge-opt-stacks:/opt/stacks
+      - stack-core-docker-dind-dev-run:/var/dind-dev-run/
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      virtual.caddyfile: |
+        http://dockge.localhost {
+          reverse_proxy http://dockge:5001 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://dockge.localhost">dockge</a>
+          <small>http://dockge.localhost</small>
+        </div>

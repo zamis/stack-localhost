@@ -1,0 +1,77 @@
+name: stack-core
+
+networks:
+  my-network-public:
+    name: my-network-public
+    external: false
+  my-network-proxy:
+    name: my-network-proxy
+    external: false
+
+volumes:
+  stack-core-docker-host-run:
+    external: false
+    name: stack-core-docker-host-run
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/run
+      o: "bind"
+  stack-core-docker-dind-dev-certs:
+    external: false
+    name: stack-core-docker-dind-dev-certs
+    driver_opts:
+      type: none
+      device: /var/mnt-links/docker/volumes/dind-dev/certs
+      o: "bind,X-mount.mkdir"
+  stack-core-docker-dind-dev-data:
+    external: false
+    name: stack-core-docker-dind-dev-data
+    driver_opts:
+      type: none
+      device: /var/mnt-links/docker/volumes/dind-dev/var/lib/docker
+      o: "bind,X-mount.mkdir"
+  stack-core-docker-dind-dev-run:
+    external: false
+    name: stack-core-docker-dind-dev-run
+    driver_opts:
+      type: none
+      device: /var/mnt-links/docker/volumes/dind-dev/var/run
+      o: "bind,X-mount.mkdir"
+  share-documents:
+    external: false
+    name: share-documents
+    driver_opts:
+      type: none
+      device: /var/mnt-links/share-documents
+      o: "bind,X-mount.mkdir"
+  share-media:
+    external: false
+    name: share-media
+    driver_opts:
+      type: none
+      device: /var/mnt-links/share-media
+      o: "bind,X-mount.mkdir"
+  share-local:
+    external: false
+    name: share-local
+    driver_opts:
+      type: none
+      device: /var/mnt-links/share-local
+      o: "bind,X-mount.mkdir"
+
+services:
+  busybox:
+    image: busybox
+    restart: no
+    networks:
+      - my-network-public
+      - my-network-proxy
+    volumes:
+      - stack-core-docker-host-run:/data/stack-core-docker-host-run/docker.sock:ro
+      - stack-core-docker-dind-dev-certs:/data/stack-core-docker-dind-dev-certs:ro
+      - stack-core-docker-dind-dev-data:/data/stack-core-docker-dind-dev-data:ro
+      - stack-core-docker-dind-dev-run:/data/stack-core-docker-dind-dev-run:ro
+      - share-documents:/data/share-documents:ro
+      - share-media:/data/share-media:ro
+      - share-local:/data/share-local:ro

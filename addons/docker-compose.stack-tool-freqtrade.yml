@@ -1,0 +1,37 @@
+name: stack-tool-freqtrade
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-tool-freqtrade-data:
+    external: true
+
+services:
+  freqtrade:
+    image: freqtradeorg/freqtrade:stable
+    restart: unless-stopped
+    networks:
+      - my-network-proxy
+    expose:
+      - 8080 # web
+    volumes:
+      - stack-tool-freqtrade-data:/freqtrade/user_data
+    command: >
+      trade
+      --logfile /freqtrade/user_data/logs/freqtrade.log
+      --db-url sqlite:////freqtrade/user_data/tradesv3.sqlite
+      --config /freqtrade/user_data/config.json
+      --strategy SampleStrategy      
+    labels:
+      virtual.caddyfile: |
+        http://freqtrade.localhost {
+          reverse_proxy http://freqtrade:8080 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://freqtrade.localhost">freqtrade</a>
+          <small>http://freqtrade.localhost</small>
+        </div>

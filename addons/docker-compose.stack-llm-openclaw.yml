@@ -1,0 +1,71 @@
+name: stack-llm-openclaw
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-llm-openclaw-home:
+    external: true
+  stack-llm-openclaw-npx:
+    external: true
+
+services:
+  openclaw:
+    image: localhost/openclaw
+    build:
+      dockerfile_inline: |
+        FROM docker.io/library/node:22-bookworm-slim@sha256:80fdb3f57c815e1b638d221f30a826823467c4a56c8f6a8d7aa091cd9b1675ea 
+        RUN apt-get update
+        RUN apt-get install -y python3 make g++
+        RUN apt-get install -y git
+        WORKDIR /root
+        VOLUME ["/root/.openclaw"]
+        VOLUME ["/root/.npm/_npx"]
+        EXPOSE 18789 18791
+        CMD ["/startup.sh"]
+    restart: no
+    configs:
+      - source: startup
+        target: /startup.sh
+        mode: 0555
+      - source: openclaw
+        target: /bin/openclaw
+        mode: 0555
+    networks:
+      - my-network-proxy
+    expose:
+      - 18789
+    volumes:
+      - stack-llm-openclaw-home:/root/.openclaw
+      - stack-llm-openclaw-npx:/root/.npm/_npx
+    labels:
+      virtual.caddyfile: |
+        http://openclaw.localhost {
+          reverse_proxy openclaw:18789 {
+          }
+        }
+        http://api.openclaw.localhost {
+          reverse_proxy openclaw:18791 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://openclaw.localhost">openclaw</a>
+          <small>http://openclaw.localhost</small>
+        </div>
+
+configs:
+  startup:
+    content: |
+      #!/usr/bin/env bash
+      set -ex
+      openclaw --version
+      openclaw config set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback true
+      openclaw gateway --allow-unconfigured
+
+  openclaw:
+    content: |
+      #!/usr/bin/env bash
+      set -ex
+      npm exec -y -- openclaw $@

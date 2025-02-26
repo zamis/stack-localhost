@@ -1,0 +1,72 @@
+name: stack-tool-coder
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-tool-coder-config:
+    external: true
+
+services:  
+  coder:
+    image: localhost/code-server
+    build:
+      dockerfile_inline: |
+        FROM linuxserver/code-server:4.117.0
+        RUN curl -fsSL https://get.docker.com | sh
+    restart: always
+    networks:
+      - my-network-proxy
+    expose:
+      - 8443
+    configs:
+      - source: ssh_config
+        target: /config/.ssh/config
+        mode: 0600
+        uid: "1000"
+        gid: "1000"
+      - source: context_host
+        target: /config/.docker/contexts/meta/4740ae6347b0172c01254ff55bae5aff5199f4446e7f6d643d40185b3f475145/meta.json
+        mode: 0444
+        uid: "1000"
+        gid: "1000"
+      - source: context_rootless
+        target: /config/.docker/contexts/meta/12b961af5feb3e9d39f93b2cefb9a1a944f18d02cca0cac2f04f5a982240605f/meta.json
+        mode: 0444
+        uid: "1000"
+        gid: "1000"
+    environment:
+      - SUDO_PASSWORD=abc
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - stack-tool-coder-config:/config
+      - /var/run:/var/run-host:rw
+      - /var/mnt-links/share-documents:/external/share-documents:rw
+      - /var/mnt-links/share-media:/external/share-media:rw
+      - /var/mnt-links/share-local:/var/mnt-links/share-local:rw
+    labels:
+      virtual.caddyfile: |
+        http://coder.localhost {
+          reverse_proxy http://coder:8443 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://coder.localhost">coder</a>
+          <small>http://coder.localhost</small>
+        </div>
+
+configs:
+  ssh_config:
+    content: |
+      Host *
+        IdentityFile /external/documents/home/.ssh/id_rsa
+        IdentitiesOnly yes
+  context_host:
+    content: |
+      {"Name":"host","Metadata":{"Description":"Host mode"},"Endpoints":{"docker":{"Host":"unix:///var/run-host/docker.sock","SkipTLSVerify":false}}}
+  context_rootless:
+    content: |
+      {"Name":"rootless","Metadata":{"Description":"Rootless mode"},"Endpoints":{"docker":{"Host":"unix:///var/run/user/1000/docker.sock","SkipTLSVerify":false}}}

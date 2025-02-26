@@ -1,0 +1,96 @@
+name: stack-llm-openwebui
+
+networks:
+  my-network-proxy:
+    external: true
+
+volumes:
+  stack-llm-openwebui-app-backend-data:
+    external: true
+
+services:
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:0.9.2
+    restart: no
+    networks:
+      - my-network-proxy
+    expose:
+      - 8080
+    volumes:
+      - stack-llm-openwebui-app-backend-data:/app/backend/data
+    environment:
+      - HF_HUB_OFFLINE=1
+    labels:
+      virtual.caddyfile: |
+        http://openwebui.localhost {
+          reverse_proxy http://openwebui:8080 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://openwebui.localhost">Open Web UI</a>
+          <small>http://openwebui.localhost</small>
+        </div>
+
+  openterminal:
+    image: localhost/open-terminal
+    build:
+      dockerfile_inline: |
+        FROM ghcr.io/open-webui/open-terminal:0.11.23
+        USER root
+        RUN apt install -y libfuse2t64 uidmap coreutils e2fsprogs openssl iproute2
+        RUN echo 'kernel.unprivileged_userns_clone=1' >> /etc/sysctl.d/userns.conf
+        RUN echo 'net.ipv4.ip_unprivileged_port_start=0' >> /etc/sysctl.d/userns.conf
+        RUN echo 'fs.inotify.max_u ser_watches=524288' >> /etc/sysctl.d/userns.conf
+        RUN echo 'fs.inotify.max_user_instances=8192' >> /etc/sysctl.d/userns.conf
+        USER user
+        ENTRYPOINT ["/app/entrypoint1.sh"]
+        CMD ["run"]
+    restart: no
+    privileged: true
+    configs:
+      - source: entrypoint1
+        target: /app/entrypoint1.sh
+        mode: 0555
+    shm_size: 2gb
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    networks:
+      - my-network-proxy
+    expose:
+      - 8000
+    environment:
+      - OPEN_TERMINAL_API_KEY=ZaOtVKjw7nr9ffDSBrrCpVNzXghfVKfB
+      - DOCKER_HOST=unix:///run/user/docker.sock
+      - XDG_RUNTIME_DIR=/run/user
+    devices:
+      - /dev/fuse:/dev/fuse
+    tmpfs:
+      - /run/user:size=1M
+      - /home/user/.local/share/docker:size=100M
+    labels:
+      virtual.caddyfile: |
+        http://openterminal.localhost {
+          reverse_proxy http://openterminal:8000 {
+          }
+        }
+      virtual.homefile: |
+        <div>
+          <a class="shadow" href="http://openterminal.localhost">openterminal</a>
+          <small>http://openterminal.localhost</small>
+        </div>
+
+configs:
+  entrypoint1:
+    content: |
+      #!/usr/bin/env bash
+      set -ex
+      sudo mkdir -p $$XDG_RUNTIME_DIR
+      sudo chown user:user $$XDG_RUNTIME_DIR
+      sudo chmod 1777 $$XDG_RUNTIME_DIR
+      sudo chown -R user:user /home/user
+      mkdir -p /home/user/.local/share/docker
+      sudo chown -R user:user /home/user
+      dockerd-rootless.sh &
+      exec /app/entrypoint.sh "$@"
