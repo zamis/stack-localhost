@@ -1,0 +1,28 @@
+name: stack-localhost-ub
+
+services:
+  build-ub:
+    restart: no
+    image: localhost/ub
+    build:
+      dockerfile_inline: |
+        FROM ubuntu:24.04
+        RUN apt update
+        RUN apt install -y gosu curl wget nano gnupg apt-transport-https ca-certificates
+        
+        RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+        RUN echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/ubuntu/24.04/prod noble main" > /etc/apt/sources.list.d/mssql-release.list
+        RUN curl -sL https://deb.nodesource.com/setup_24.x | bash -
+
+        RUN apt update
+        RUN apt install -y nodejs
+        RUN apt install -y postgresql libpq5 libncurses6
+        RUN ACCEPT_EULA=Y apt install -y --allow-downgrades mssql-tools msodbcsql17 unixodbc-dev 
+
+        WORKDIR /tmp
+        RUN curl -fsSL https://unitybase.info/media/files/ub-server-v5.26.15EE.deb -o ./ub-server.deb && apt -y install ./ub-server.deb && rm ./ub-server.deb
+
+        WORKDIR /u01/
+        ENV PS1="[ubd] \u@\h:\[\033[0;36m\]\w\[\033[0m\]\$ "
+        CMD ["/bin/bash"]
+    network_mode: none

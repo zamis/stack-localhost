@@ -1,0 +1,5 @@
+#!/bin/bash
+PPWD="$(dirname "$PWD")"
+# echo PWD:${PWD}
+# echo PPWD:${PPWD}
+exec docker run -it --rm --net host -v ${HOME}:/root -v ${PPWD}/:${PPWD} -w ${PWD} localhost/dotnet $@

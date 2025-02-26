@@ -1,0 +1,10 @@
+name: stack-localhost-ubuntu-build
+
+services:
+  ubuntu-build:
+    restart: no
+    image: localhost/ubuntu
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["sleep", "1s"]

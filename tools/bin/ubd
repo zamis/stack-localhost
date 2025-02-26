@@ -1,0 +1,4 @@
+#!/bin/bash
+PPWD="$(dirname "$PWD")"
+# echo PWD:${PWD}
+exec docker run -it --rm --net host -v ${PWD}/:${PWD} -w ${PWD} localhost/ub $@

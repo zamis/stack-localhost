@@ -1,0 +1,23 @@
+name: stack-localhost-dotnet
+
+services:
+  build-dotnet:
+    restart: no
+    image: localhost/dotnet
+    build:
+      dockerfile_inline: |
+        FROM mcr.microsoft.com/dotnet/sdk:9.0 AS dotnet-9
+        FROM mcr.microsoft.com/dotnet/sdk:10.0 AS dotnet-10
+        
+        FROM ubuntu:26.04
+        RUN apt update
+        RUN apt install -y gosu curl libicu-dev
+        COPY --from=dotnet-9 /usr/share/dotnet /usr/share/dotnet
+        COPY --from=dotnet-10 /usr/share/dotnet /usr/share/dotnet
+        ENV DOTNET_ROOT=/usr/share/dotnet
+        RUN ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
+
+        WORKDIR /tmp/
+        ENV PS1="[dotnetd] \u@\h:\[\033[0;36m\]\w\[\033[0m\]\$ "
+        CMD ["/bin/bash"]
+    network_mode: none
